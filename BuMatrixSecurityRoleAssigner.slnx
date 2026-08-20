@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="BuMatrixSecurityRoleAssigner.Core/BuMatrixSecurityRoleAssigner.Core.csproj" />
+  <Project Path="BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssigner.csproj" />
+</Solution>

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using Microsoft.Xrm.Sdk;
 
-namespace TeamRoleManager
+namespace BuMatrixSecurityRoleAssigner.Core
 {
     /// <summary>A team row shown in the left list.</summary>
     public class TeamItem

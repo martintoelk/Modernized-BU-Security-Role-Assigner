@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Core logic for the "BU Matrix Security Role Assigner" XrmToolBox plugin.
+    Depends only on Microsoft.Xrm.Sdk (IOrganizationService) - no WinForms, no
+    XrmToolBox.Extensibility - so it's usable from a unit test project with a
+    fake IOrganizationService.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>BuMatrixSecurityRoleAssigner.Core</AssemblyName>
+    <RootNamespace>BuMatrixSecurityRoleAssigner.Core</RootNamespace>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>1.0.0</Version>
+    <Company>Martin Tölk</Company>
+    <Product>BU Matrix Security Role Assigner</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Provides Microsoft.Xrm.Sdk (IOrganizationService, Entity, QueryExpression, ...). -->
+    <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.*" />
+  </ItemGroup>
+
+</Project>

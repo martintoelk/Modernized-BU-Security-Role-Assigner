@@ -57,14 +57,16 @@ dotnet restore
 dotnet build -c Release
 ```
 
-Output: `bin/Release/TeamRoleManager.dll`.
+Output: `BuMatrixSecurityRoleAssigner\bin\Release\BuMatrixSecurityRoleAssigner.dll` (plus
+`BuMatrixSecurityRoleAssigner.Core.dll`, which it depends on).
 
 > If your XrmToolBox build still runs on .NET Framework 4.6.2, change `<TargetFramework>`
-> in `TeamRoleManager.csproj` to `net462`.
+> in both `.csproj` files to `net462`.
 
 ## Deploy
 
-Copy **only** `TeamRoleManager.dll` into the XrmToolBox plugins folder:
+Copy `BuMatrixSecurityRoleAssigner.dll` **and** `BuMatrixSecurityRoleAssigner.Core.dll` into
+the XrmToolBox plugins folder:
 
 ```
 %AppData%\MscrmTools\XrmToolBox\Plugins
@@ -72,7 +74,7 @@ Copy **only** `TeamRoleManager.dll` into the XrmToolBox plugins folder:
 
 Don't copy the SDK / XrmToolBox assemblies from `bin` — the host already ships those, and
 copying them can cause version conflicts. Restart XrmToolBox; the plugin appears as
-**Team Role Manager**.
+**BU Matrix Security Role Assigner**.
 
 ## Use
 
@@ -86,11 +88,13 @@ copying them can cause version conflicts. Restart XrmToolBox; the plugin appears
 
 | File | Purpose |
 |------|---------|
-| `Plugin.cs` | XrmToolBox export/metadata (the plugin factory) |
-| `TeamRoleManagerControl.cs` | Data loading + add/remove logic |
-| `TeamRoleManagerControl.Designer.cs` | WinForms UI |
-| `Models.cs` | `TeamItem`, `RoleItem`, `OperationLog` |
-| `TeamRoleManager.csproj` | SDK-style project (net48, WinForms) |
+| `BuMatrixSecurityRoleAssigner.Core/TeamRoleAssignmentService.cs` | Add/remove logic + team/role data access, depends only on `IOrganizationService` |
+| `BuMatrixSecurityRoleAssigner.Core/Models.cs` | `TeamItem`, `RoleItem`, `OperationLog` |
+| `BuMatrixSecurityRoleAssigner.Core/BuMatrixSecurityRoleAssigner.Core.csproj` | Class library (net48), no WinForms/XTB dependency |
+| `BuMatrixSecurityRoleAssigner/Plugin.cs` | XrmToolBox export/metadata (the plugin factory) |
+| `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssignerControl.cs` | UI wiring, threading (`WorkAsync`), calls into Core |
+| `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssignerControl.Designer.cs` | WinForms UI |
+| `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssigner.csproj` | SDK-style project (net48, WinForms), references Core |
 
 ## License
 

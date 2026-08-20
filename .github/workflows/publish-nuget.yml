@@ -1,0 +1,41 @@
+name: Publish NuGet package
+
+# Manual trigger for now — flip to `release: {types: [published]}` once the
+# rewrite (Core/UI split, rename) has landed and a release process exists.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version to publish (e.g. 1.0.0)"
+        required: true
+
+jobs:
+  build-pack-publish:
+    runs-on: windows-latest
+    permissions:
+      id-token: write # required for NuGet Trusted Publishing (OIDC)
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+
+      - name: Pack
+        run: dotnet pack BuMatrixSecurityRoleAssigner\BuMatrixSecurityRoleAssigner.csproj -c Release --no-build -p:NuspecFile=..\BuMatrixSecurityRoleAssigner.nuspec -p:NuspecProperties="version=${{ inputs.version }}" -o out
+
+      - name: NuGet login (OIDC -> temp API key)
+        uses: NuGet/login@v1
+        id: login
+        with:
+          user: martintoelk
+
+      - name: Push to NuGet.org
+        run: dotnet nuget push out\*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -25,7 +25,9 @@
     </dependencies>
   </metadata>
   <files>
-    <!-- Plugin DLL must sit under a "Plugins" folder inside the package. -->
-    <file src="bin\Release\TeamRoleManager.dll" target="lib\net48\Plugins\TeamRoleManager.dll" />
+    <!-- Plugin DLL must sit under a "Plugins" folder inside the package. Core.dll is a
+         dependency of the plugin DLL, so it needs to sit alongside it, not under Plugins. -->
+    <file src="BuMatrixSecurityRoleAssigner\bin\Release\BuMatrixSecurityRoleAssigner.dll" target="lib\net48\Plugins\BuMatrixSecurityRoleAssigner.dll" />
+    <file src="BuMatrixSecurityRoleAssigner\bin\Release\BuMatrixSecurityRoleAssigner.Core.dll" target="lib\net48\Plugins\BuMatrixSecurityRoleAssigner.Core.dll" />
   </files>
 </package>

@@ -16,23 +16,25 @@ its BU. A legacy classic-BU code path exists behind an opt-in toggle (see Open d
 
 ## Current status
 
-Working first cut, authored in a chat session and dropped into this repo. **Not yet compiled**
-(it was written on Linux with no .NET Framework / XTB assemblies available). First job for the
-CLI: restore, build, fix any compile errors, then a manual smoke test against a dev org.
+Renamed and split into `BuMatrixSecurityRoleAssigner.Core` (class library, no WinForms/XTB
+dependency) and `BuMatrixSecurityRoleAssigner` (the thin XTB plugin project) — see ticket #7.
+Builds clean (`dotnet restore && dotnet build -c Release`, 0 errors). Manual smoke test against
+a dev org is still outstanding.
 
 ## File map
 
 | File | Purpose |
 |------|---------|
-| `Plugin.cs` | MEF export + XTB metadata (plugin factory) |
-| `TeamRoleManagerControl.cs` | Data load + add/remove logic |
-| `TeamRoleManagerControl.Designer.cs` | WinForms UI (toolstrip, split lists, status bar) |
-| `Models.cs` | `TeamItem`, `RoleItem`, `OperationLog` |
-| `TeamRoleManager.csproj` | SDK-style project (net48, `UseWindowsForms`) |
+| `BuMatrixSecurityRoleAssigner.Core/TeamRoleAssignmentService.cs` | Team/role data access + add/remove logic; depends only on `IOrganizationService` |
+| `BuMatrixSecurityRoleAssigner.Core/Models.cs` | `TeamItem`, `RoleItem`, `OperationLog` |
+| `BuMatrixSecurityRoleAssigner.Core/BuMatrixSecurityRoleAssigner.Core.csproj` | SDK-style class library (net48) |
+| `BuMatrixSecurityRoleAssigner/Plugin.cs` | MEF export + XTB metadata (plugin factory) |
+| `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssignerControl.cs` | UI wiring + threading (`WorkAsync`), delegates logic to Core |
+| `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssignerControl.Designer.cs` | WinForms UI (toolstrip, split lists, status bar) |
+| `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssigner.csproj` | SDK-style project (net48, `UseWindowsForms`), references Core |
+| `BuMatrixSecurityRoleAssigner.sln` | Solution referencing both projects |
+| `BuMatrixSecurityRoleAssigner.nuspec` | NuGet package spec (renamed to match, per ticket #6 prep) |
 | `README.md` | End-user build/deploy/use notes |
-
-> Namespace / assembly is still `TeamRoleManager` from the original draft. See Open decisions —
-> decide whether to rename to match the repo (`ModernizedBuRoleAssigner`).
 
 ## Architecture & key decisions
 
@@ -59,10 +61,11 @@ CLI: restore, build, fix any compile errors, then a manual smoke test against a 
 1. **Keep or drop the classic-BU toggle?** Author leans modernized-only, which would let us
    delete the toggle (`tsbMatchBu`), the `byRootBu` resolution, `RoleItem.RootRoleId`, the
    `parentrootroleid` column in `RetrieveRoles`, and the `NoRoleInBu` log bucket. Do **not**
-   remove until confirmed — leaving it is low-cost insurance for any classic org.
-2. **Rename to match the repo?** `TeamRoleManager` → `ModernizedBuRoleAssigner` across
-   namespace, `AssemblyName`, `RootNamespace`, plugin `Name` metadata, and DLL filename. If yes,
-   update `README.md` deploy filename too.
+   remove until confirmed — leaving it is low-cost insurance for any classic org. Ticket #7
+   deliberately kept this in place; a later ticket replaces it with auto-detection.
+2. ~~Rename to match the repo?~~ Done in ticket #7: `TeamRoleManager` →
+   `BuMatrixSecurityRoleAssigner` across namespace, `AssemblyName`, `RootNamespace`, plugin
+   `Name`/`Description` metadata, DLL filename, and the nuspec.
 3. **Plugin tile icon.** `SmallImageBase64` / `BigImageBase64` are `null`. Add a 32px + 120px
    base64 PNG so it gets a proper tile in the XTB library.
 
@@ -76,25 +79,33 @@ dotnet restore
 dotnet build -c Release
 ```
 
-Output: `bin\Release\TeamRoleManager.dll` (rename target if decision #2 is taken).
+Builds both `BuMatrixSecurityRoleAssigner.Core` and `BuMatrixSecurityRoleAssigner` via
+`BuMatrixSecurityRoleAssigner.sln`. Output: `BuMatrixSecurityRoleAssigner\bin\Release\` —
+`BuMatrixSecurityRoleAssigner.dll` (the plugin) plus `BuMatrixSecurityRoleAssigner.Core.dll`
+(its dependency, copied there automatically via the project reference).
 
-If the XTB host is on 4.6.2, change `<TargetFramework>` to `net462`.
+If the XTB host is on 4.6.2, change `<TargetFramework>` to `net462` in both `.csproj` files.
+
+> The XTB SDK package id is **`XrmToolBoxPackage`** on nuget.org, not `XrmToolBox.Extensibility`
+> (that's the assembly/namespace it provides). Fixed in ticket #7 — the original `.csproj` had
+> the wrong package id and could not restore.
 
 ## Deploy
 
-Copy **only** the plugin DLL into `%AppData%\MscrmTools\XrmToolBox\Plugins`. Do **not** copy the
-SDK / XrmToolBox assemblies from `bin` — the host ships those; copying them causes load conflicts.
-Restart XTB; the plugin appears as "Team Role Manager" (or the renamed value).
+Copy the plugin DLL **and** `BuMatrixSecurityRoleAssigner.Core.dll` into
+`%AppData%\MscrmTools\XrmToolBox\Plugins`. Do **not** copy the SDK / XrmToolBox assemblies from
+`bin` — the host ships those; copying them causes load conflicts. Restart XTB; the plugin
+appears as "BU Matrix Security Role Assigner".
 
 ## Suggested next steps for the CLI
 
-1. `dotnet restore && dotnet build -c Release`; fix compile errors (watch the `1.*` floating
-   `XrmToolBox.Extensibility` version — pin it once restore resolves a good one).
-2. Confirm Open decisions 1–3 with the author, then apply.
-3. Smoke test on a dev org: load, multi-select teams + roles, add, verify via `teamroles`,
+1. Smoke test on a dev org: load, multi-select teams + roles, add, verify via `teamroles`,
    remove, verify. Test an access team (expect a clean per-team error, not a crash) and a
    cross-BU assignment (expect success on modernized BUs).
-4. Consider: `.gitignore` (bin/obj), a plugin icon, and a short `CHANGELOG.md`.
+2. Confirm Open decisions 1 and 3 with the author.
+3. Consider: a plugin icon, and a short `CHANGELOG.md`.
+4. A later ticket sets up a test project against `BuMatrixSecurityRoleAssigner.Core` using a
+   fake `IOrganizationService` — the Core/UI split in ticket #7 is what makes that possible.
 
 ## Conventions
 
@@ -110,6 +121,10 @@ Restart XTB; the plugin appears as "Team Role Manager" (or the renamed value).
 ### Issue tracker
 
 Issues live in this repo's GitHub Issues (`martintoelk/Modernized-BU-Security-Role-Assigner`), using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 

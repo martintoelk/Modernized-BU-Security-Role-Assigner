@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    XrmToolBox plugin: "BU Matrix Security Role Assigner"
+    Targets .NET Framework 4.8 (XrmToolBox host requirement). If your XTB build
+    still runs on 4.6.2, change TargetFramework to net462.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>BuMatrixSecurityRoleAssigner</AssemblyName>
+    <RootNamespace>BuMatrixSecurityRoleAssigner</RootNamespace>
+    <!-- Keep the DLL name clean so it's easy to drop into the XTB Plugins folder -->
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Version>1.0.0</Version>
+    <Company>Martin Tölk</Company>
+    <Product>BU Matrix Security Role Assigner</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      NuGet id is "XrmToolBoxPackage" (not "XrmToolBox.Extensibility" - that's the assembly/
+      namespace it provides, not the package id). Brings in XrmToolBox.Extensibility,
+      MscrmTools.Xrm.Connection and the Dataverse/CRM SDK core assemblies. Floating "1.*"
+      resolves the latest 1.x at restore time. Pin an exact version once you've confirmed
+      the one your team standardises on.
+    -->
+    <PackageReference Include="XrmToolBoxPackage" Version="1.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BuMatrixSecurityRoleAssigner.Core\BuMatrixSecurityRoleAssigner.Core.csproj" />
+  </ItemGroup>
+
+</Project>

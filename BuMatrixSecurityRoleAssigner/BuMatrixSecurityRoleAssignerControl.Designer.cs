@@ -1,8 +1,8 @@
 using System.Windows.Forms;
 
-namespace TeamRoleManager
+namespace BuMatrixSecurityRoleAssigner
 {
-    partial class TeamRoleManagerControl
+    partial class BuMatrixSecurityRoleAssignerControl
     {
         private ToolStrip toolStrip;
         private ToolStripButton tsbLoad;
@@ -138,7 +138,7 @@ namespace TeamRoleManager
             this.Controls.Add(this.split);
             this.Controls.Add(this.statusStrip);
             this.Controls.Add(this.toolStrip);
-            this.Name = "TeamRoleManagerControl";
+            this.Name = "BuMatrixSecurityRoleAssignerControl";
             this.Size = new System.Drawing.Size(820, 560);
 
             this.ResumeLayout(false);
