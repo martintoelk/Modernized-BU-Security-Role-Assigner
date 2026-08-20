@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.Xrm.Sdk;
+using BuMatrixSecurityRoleAssigner.Core.Entities;
 
 namespace BuMatrixSecurityRoleAssigner.Core
 {
@@ -31,7 +32,7 @@ namespace BuMatrixSecurityRoleAssigner.Core
         /// </summary>
         public Guid RootRoleId { get; set; }
 
-        public EntityReference ToRef() => new EntityReference("role", Id);
+        public EntityReference ToRef() => new EntityReference(Role.EntityLogicalName, Id);
     }
 
     /// <summary>Collects what happened during an add/remove run so we can show a summary.</summary>

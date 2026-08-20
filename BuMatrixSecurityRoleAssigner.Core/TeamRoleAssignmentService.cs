@@ -3,17 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
+using BuMatrixSecurityRoleAssigner.Core.Entities;
 
 namespace BuMatrixSecurityRoleAssigner.Core
 {
     /// <summary>
     /// Team/role data access and the add/remove logic. Depends only on IOrganizationService,
     /// so it can be exercised in a unit test against a fake service - no WinForms, no
-    /// PluginControlBase/WorkAsync.
+    /// PluginControlBase/WorkAsync. Uses the early-bound entity classes under
+    /// Generated/Entities (regenerate via `pac modelbuilder build` - see that folder's README)
+    /// instead of magic-string attribute/entity names.
     /// </summary>
     public class TeamRoleAssignmentService
     {
-        private const string TeamRolesRelationship = "teamroles_association";
+        private const string TeamRolesRelationship = Team.Fields.teamroles_association;
 
         private readonly IOrganizationService _service;
 
@@ -24,29 +27,29 @@ namespace BuMatrixSecurityRoleAssigner.Core
 
         public List<TeamItem> RetrieveTeams()
         {
-            var query = new QueryExpression("team")
+            var query = new QueryExpression(Team.EntityLogicalName)
             {
-                ColumnSet = new ColumnSet("teamid", "name", "businessunitid", "teamtype"),
+                ColumnSet = new ColumnSet(Team.Fields.Name, Team.Fields.BusinessUnitId, Team.Fields.TeamType),
                 PageInfo = new PagingInfo { Count = 5000, PageNumber = 1 }
             };
-            query.AddOrder("name", OrderType.Ascending);
+            query.AddOrder(Team.Fields.Name, OrderType.Ascending);
 
             var list = new List<TeamItem>();
             EntityCollection ec;
             do
             {
                 ec = _service.RetrieveMultiple(query);
-                foreach (var t in ec.Entities)
+                foreach (var t in ec.Entities.Select(e => e.ToEntity<Team>()))
                 {
-                    var bu = t.GetAttributeValue<EntityReference>("businessunitid");
+                    var bu = t.BusinessUnitId;
                     list.Add(new TeamItem
                     {
                         Id = t.Id,
-                        Name = t.GetAttributeValue<string>("name"),
+                        Name = t.Name,
                         BusinessUnitId = bu?.Id ?? Guid.Empty,
                         BusinessUnitName = bu?.Name ?? string.Empty,
-                        TeamType = t.FormattedValues.ContainsKey("teamtype")
-                            ? t.FormattedValues["teamtype"]
+                        TeamType = t.FormattedValues.ContainsKey(Team.Fields.TeamType)
+                            ? t.FormattedValues[Team.Fields.TeamType]
                             : string.Empty
                     });
                 }
@@ -60,26 +63,26 @@ namespace BuMatrixSecurityRoleAssigner.Core
 
         public List<RoleItem> RetrieveRoles()
         {
-            var query = new QueryExpression("role")
+            var query = new QueryExpression(Role.EntityLogicalName)
             {
-                ColumnSet = new ColumnSet("roleid", "name", "businessunitid", "parentrootroleid"),
+                ColumnSet = new ColumnSet(Role.Fields.Name, Role.Fields.BusinessUnitId, Role.Fields.ParentRootRoleId),
                 PageInfo = new PagingInfo { Count = 5000, PageNumber = 1 }
             };
-            query.AddOrder("name", OrderType.Ascending);
+            query.AddOrder(Role.Fields.Name, OrderType.Ascending);
 
             var list = new List<RoleItem>();
             EntityCollection ec;
             do
             {
                 ec = _service.RetrieveMultiple(query);
-                foreach (var r in ec.Entities)
+                foreach (var r in ec.Entities.Select(e => e.ToEntity<Role>()))
                 {
-                    var bu = r.GetAttributeValue<EntityReference>("businessunitid");
-                    var root = r.GetAttributeValue<EntityReference>("parentrootroleid");
+                    var bu = r.BusinessUnitId;
+                    var root = r.ParentRootRoleId;
                     list.Add(new RoleItem
                     {
                         Id = r.Id,
-                        Name = r.GetAttributeValue<string>("name"),
+                        Name = r.Name,
                         BusinessUnitId = bu?.Id ?? Guid.Empty,
                         BusinessUnitName = bu?.Name ?? string.Empty,
                         // For a role in the root BU, parentrootroleid points to itself; fall back to own id.
@@ -97,12 +100,12 @@ namespace BuMatrixSecurityRoleAssigner.Core
         /// <summary>Role ids (BU-specific) currently associated with the given team.</summary>
         public HashSet<Guid> GetTeamRoleIds(Guid teamId)
         {
-            var query = new QueryExpression("role")
+            var query = new QueryExpression(Role.EntityLogicalName)
             {
-                ColumnSet = new ColumnSet("roleid")
+                ColumnSet = new ColumnSet(Role.Fields.RoleId)
             };
-            var link = query.AddLink("teamroles", "roleid", "roleid");
-            link.LinkCriteria.AddCondition("teamid", ConditionOperator.Equal, teamId);
+            var link = query.AddLink(TeamRoles.EntityLogicalName, Role.Fields.RoleId, TeamRoles.Fields.RoleId);
+            link.LinkCriteria.AddCondition(TeamRoles.Fields.TeamId, ConditionOperator.Equal, teamId);
 
             var result = _service.RetrieveMultiple(query);
             return new HashSet<Guid>(result.Entities.Select(e => e.Id));
@@ -194,13 +197,13 @@ namespace BuMatrixSecurityRoleAssigner.Core
                 {
                     if (add && toAssign.Count > 0)
                     {
-                        _service.Associate("team", team.Id, new Relationship(TeamRolesRelationship),
+                        _service.Associate(Team.EntityLogicalName, team.Id, new Relationship(TeamRolesRelationship),
                             new EntityReferenceCollection(toAssign));
                         log.Changed += toAssign.Count;
                     }
                     else if (!add && toRemove.Count > 0)
                     {
-                        _service.Disassociate("team", team.Id, new Relationship(TeamRolesRelationship),
+                        _service.Disassociate(Team.EntityLogicalName, team.Id, new Relationship(TeamRolesRelationship),
                             new EntityReferenceCollection(toRemove));
                         log.Changed += toRemove.Count;
                     }

@@ -27,17 +27,22 @@ a dev org is still outstanding.
 |------|---------|
 | `BuMatrixSecurityRoleAssigner.Core/TeamRoleAssignmentService.cs` | Team/role data access + add/remove logic; depends only on `IOrganizationService` |
 | `BuMatrixSecurityRoleAssigner.Core/Models.cs` | `TeamItem`, `RoleItem`, `OperationLog` |
+| `BuMatrixSecurityRoleAssigner.Core/Generated/Entities/*.cs` | Early-bound Dataverse entity classes (`Team`, `Role`, `TeamRoles`, `SystemUser`, `SystemUserRoles`, `BusinessUnit`) — **generated, don't hand-edit**. Regenerate with `pac modelbuilder build --entitynamesfilter "team;role;systemuser;businessunit;teamroles;systemuserroles" --outdirectory "BuMatrixSecurityRoleAssigner.Core/Generated" --namespace "BuMatrixSecurityRoleAssigner.Core.Entities" --emitfieldsclasses` (ticket #14) |
 | `BuMatrixSecurityRoleAssigner.Core/BuMatrixSecurityRoleAssigner.Core.csproj` | SDK-style class library (net48) |
+| `BuMatrixSecurityRoleAssigner.Core.Tests/` | xUnit test project + hand-rolled `FakeOrganizationService` double (ticket #9) — no live org needed |
 | `BuMatrixSecurityRoleAssigner/Plugin.cs` | MEF export + XTB metadata (plugin factory) |
 | `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssignerControl.cs` | UI wiring + threading (`WorkAsync`), delegates logic to Core |
 | `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssignerControl.Designer.cs` | WinForms UI (toolstrip, split lists, status bar) |
 | `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssigner.csproj` | SDK-style project (net48, `UseWindowsForms`), references Core |
-| `BuMatrixSecurityRoleAssigner.sln` | Solution referencing both projects |
+| `BuMatrixSecurityRoleAssigner.slnx` | Solution referencing all three projects |
 | `BuMatrixSecurityRoleAssigner.nuspec` | NuGet package spec (renamed to match, per ticket #6 prep) |
 | `README.md` | End-user build/deploy/use notes |
 
 ## Architecture & key decisions
 
+- **Early-bound entities.** `TeamRoleAssignmentService` uses the generated classes under
+  `Generated/Entities` (`Team`, `Role`, `TeamRoles`, ...) instead of magic-string entity/attribute
+  names — `Team.EntityLogicalName`, `Role.Fields.BusinessUnitId`, etc. (ticket #14).
 - **N:N relationship** used for assignment is `teamroles_association` (intersect entity
   `teamroles`), via `IOrganizationService.Associate` / `Disassociate`.
 - **Default = assign exact role.** The role the user selects is associated as-is, whatever its
