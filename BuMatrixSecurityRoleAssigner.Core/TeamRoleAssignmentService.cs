@@ -113,28 +113,30 @@ namespace BuMatrixSecurityRoleAssigner.Core
 
         /// <summary>
         /// Assigns or removes <paramref name="selectedRoles"/> for each of <paramref name="teams"/>.
-        /// When <paramref name="matchBu"/> is true (classic model), each role is first resolved to
-        /// the copy that lives in the team's own business unit, using <paramref name="allRoles"/>
-        /// (every role, not just the selection) to build the root-role -> BU -> role index.
+        /// Default (modernized business units): the exact role selected is associated as-is,
+        /// keeping its own business unit. Classic-BU orgs/teams are auto-detected via a
+        /// behavioral probe, not a manual toggle: if the exact-role association faults for a
+        /// team, each faulted role is resolved to the copy that lives in that team's own
+        /// business unit (using <paramref name="allRoles"/> - every role, not just the
+        /// selection - to build the root-role -> BU -> role index) and retried once. A
+        /// successful retry is surfaced as a warning (<see cref="OperationLog.ClassicBuDetected"/>),
+        /// never a silent behavior switch; if the retry can't resolve a BU copy or also faults,
+        /// the original error/skip is reported as before.
         /// </summary>
         public OperationLog AssignOrRemove(
             IReadOnlyList<TeamItem> teams,
             IReadOnlyList<RoleItem> selectedRoles,
             IReadOnlyList<RoleItem> allRoles,
             bool add,
-            bool matchBu,
             Action<string> progress = null)
         {
             if (teams == null) throw new ArgumentNullException(nameof(teams));
             if (selectedRoles == null) throw new ArgumentNullException(nameof(selectedRoles));
             if (allRoles == null) throw new ArgumentNullException(nameof(allRoles));
 
-            // Only needed in classic mode: index every role copy by (root role, business unit).
-            // root -> (buId -> role)
-            var byRootBu = matchBu
-                ? allRoles.GroupBy(r => r.RootRoleId)
-                          .ToDictionary(g => g.Key, g => g.ToDictionary(r => r.BusinessUnitId, r => r))
-                : null;
+            // Index every role copy by (root role, business unit), for the classic-BU fallback.
+            var byRootBu = allRoles.GroupBy(r => r.RootRoleId)
+                                    .ToDictionary(g => g.Key, g => g.ToDictionary(r => r.BusinessUnitId, r => r));
 
             var log = new OperationLog();
             var n = 0;
@@ -155,67 +157,116 @@ namespace BuMatrixSecurityRoleAssigner.Core
                     continue;
                 }
 
-                var toAssign = new List<EntityReference>();
-                var toRemove = new List<EntityReference>();
-
+                // Modernized default: assign/remove exactly what the user picked, whatever its BU.
+                var targets = new List<RoleItem>();
                 foreach (var role in selectedRoles)
                 {
-                    RoleItem targetRole;
-                    if (matchBu)
-                    {
-                        // Classic model: use the copy of this role that lives in THIS team's BU.
-                        if (!byRootBu.TryGetValue(role.RootRoleId, out var buMap) ||
-                            !buMap.TryGetValue(team.BusinessUnitId, out targetRole))
-                        {
-                            log.NoRoleInBu.Add($"{team.Name} ({team.BusinessUnitName}) <- {role.Name}");
-                            continue;
-                        }
-                    }
-                    else
-                    {
-                        // Modernized BUs: assign exactly what the user picked, whatever its BU.
-                        targetRole = role;
-                    }
-
                     if (add)
                     {
-                        if (existing.Contains(targetRole.Id))
-                            log.AlreadyPresent.Add($"{team.Name} <- {targetRole.Name}");
+                        if (existing.Contains(role.Id))
+                            log.AlreadyPresent.Add($"{team.Name} <- {role.Name}");
                         else
-                            toAssign.Add(targetRole.ToRef());
+                            targets.Add(role);
                     }
                     else
                     {
-                        if (!existing.Contains(targetRole.Id))
-                            log.NotPresent.Add($"{team.Name} <- {targetRole.Name}");
+                        if (!existing.Contains(role.Id))
+                            log.NotPresent.Add($"{team.Name} <- {role.Name}");
                         else
-                            toRemove.Add(targetRole.ToRef());
+                            targets.Add(role);
                     }
                 }
+
+                if (targets.Count == 0)
+                    continue;
 
                 try
                 {
-                    if (add && toAssign.Count > 0)
-                    {
-                        _service.Associate(Team.EntityLogicalName, team.Id, new Relationship(TeamRolesRelationship),
-                            new EntityReferenceCollection(toAssign));
-                        log.Changed += toAssign.Count;
-                    }
-                    else if (!add && toRemove.Count > 0)
-                    {
-                        _service.Disassociate(Team.EntityLogicalName, team.Id, new Relationship(TeamRolesRelationship),
-                            new EntityReferenceCollection(toRemove));
-                        log.Changed += toRemove.Count;
-                    }
+                    AssociateOrDisassociate(team.Id, targets.Select(r => r.ToRef()), add);
+                    log.Changed += targets.Count;
                 }
                 catch (Exception ex)
                 {
-                    // e.g. Access teams (teamtype = Access) cannot hold security roles -> surfaced here.
-                    log.Errors.Add($"{team.Name}: {ex.Message}");
+                    // Probe result: either a genuine per-team fault (e.g. Access teams can't hold
+                    // security roles) or a classic-BU mismatch. Retry resolving each faulted role
+                    // to this team's own BU copy; a successful retry confirms classic-BU behavior.
+                    // Roles split three ways:
+                    //  - resolved: a distinct BU copy exists and isn't already in the state we
+                    //    want (add: not yet assigned; remove: currently assigned) - worth retrying.
+                    //  - noBuCopy: no copy of this logical role exists in this team's BU at all -
+                    //    a genuine "nothing to fall back to", reported as NoRoleInBu.
+                    //  - sameBu: the "closest" copy IS the one we already tried (team is already in
+                    //    that role's BU) - the fault isn't a BU mismatch, so it's a real error
+                    //    (e.g. Access team), not a BU-copy gap.
+                    // The BU-copy's own id (not the originally-selected role's id) is what's checked
+                    // against `existing` here - it's the actual row that would be (dis)associated,
+                    // and may already be in the wanted state from a prior run (idempotency).
+                    var resolved = new List<RoleItem>();
+                    var noBuCopy = new List<RoleItem>();
+                    var sameBu = new List<RoleItem>();
+                    foreach (var role in targets)
+                    {
+                        if (!byRootBu.TryGetValue(role.RootRoleId, out var buMap) ||
+                            !buMap.TryGetValue(team.BusinessUnitId, out var buCopy))
+                        {
+                            noBuCopy.Add(role);
+                            continue;
+                        }
+
+                        if (buCopy.Id == role.Id)
+                        {
+                            sameBu.Add(role);
+                            continue;
+                        }
+
+                        if (add)
+                        {
+                            if (existing.Contains(buCopy.Id))
+                                log.AlreadyPresent.Add($"{team.Name} <- {buCopy.Name}");
+                            else
+                                resolved.Add(buCopy);
+                        }
+                        else
+                        {
+                            if (!existing.Contains(buCopy.Id))
+                                log.NotPresent.Add($"{team.Name} <- {buCopy.Name}");
+                            else
+                                resolved.Add(buCopy);
+                        }
+                    }
+
+                    foreach (var role in noBuCopy)
+                        log.NoRoleInBu.Add($"{team.Name} ({team.BusinessUnitName}) <- {role.Name}");
+                    if (sameBu.Count > 0)
+                        log.Errors.Add($"{team.Name}: {ex.Message}");
+
+                    if (resolved.Count == 0)
+                        continue;
+
+                    try
+                    {
+                        AssociateOrDisassociate(team.Id, resolved.Select(r => r.ToRef()), add);
+                        log.Changed += resolved.Count;
+                        log.ClassicBuDetected.Add(
+                            $"{team.Name} ({team.BusinessUnitName}): matched {resolved.Count} role(s) to the team's own business unit.");
+                    }
+                    catch (Exception ex2)
+                    {
+                        log.Errors.Add($"{team.Name}: {ex2.Message}");
+                    }
                 }
             }
 
             return log;
+        }
+
+        private void AssociateOrDisassociate(Guid teamId, IEnumerable<EntityReference> roleRefs, bool add)
+        {
+            var refs = new EntityReferenceCollection(roleRefs.ToList());
+            if (add)
+                _service.Associate(Team.EntityLogicalName, teamId, new Relationship(TeamRolesRelationship), refs);
+            else
+                _service.Disassociate(Team.EntityLogicalName, teamId, new Relationship(TeamRolesRelationship), refs);
         }
     }
 }

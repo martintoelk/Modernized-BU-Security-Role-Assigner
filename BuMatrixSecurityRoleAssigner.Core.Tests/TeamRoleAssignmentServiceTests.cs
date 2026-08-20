@@ -66,7 +66,7 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             var roles = sut.RetrieveRoles();
             var selected = roles.Where(r => r.Id == newRole.Id || r.Id == alreadyAssignedRole.Id).ToList();
 
-            var log = sut.AssignOrRemove(new[] { teamItem }, selected, roles, add: true, matchBu: false);
+            var log = sut.AssignOrRemove(new[] { teamItem }, selected, roles, add: true);
 
             Assert.Equal(1, log.Changed);
             Assert.Single(log.AlreadyPresent);
@@ -90,7 +90,7 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             var roles = sut.RetrieveRoles();
             var selected = roles.Where(r => r.Id == assignedRole.Id || r.Id == neverAssignedRole.Id).ToList();
 
-            var log = sut.AssignOrRemove(new[] { teamItem }, selected, roles, add: false, matchBu: false);
+            var log = sut.AssignOrRemove(new[] { teamItem }, selected, roles, add: false);
 
             Assert.Equal(1, log.Changed);
             Assert.Single(log.NotPresent);
@@ -105,13 +105,13 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             var accessTeam = fake.SeedTeam(Guid.NewGuid(), "Support Access Team", RootBuId, "Root BU", "Access");
             var ownerTeam = fake.SeedTeam(Guid.NewGuid(), "Sales Team", RootBuId, "Root BU", "Owner");
             var role = fake.SeedRole(Guid.NewGuid(), "Salesperson", RootBuId, "Root BU");
-            fake.FaultPredicate = (entityName, entityId, relationship) => entityId == accessTeam.Id;
+            fake.FaultPredicate = (entityName, entityId, relationship, related) => entityId == accessTeam.Id;
             var sut = new TeamRoleAssignmentService(fake);
 
             var teams = sut.RetrieveTeams();
             var roles = sut.RetrieveRoles();
 
-            var log = sut.AssignOrRemove(teams, roles, roles, add: true, matchBu: false);
+            var log = sut.AssignOrRemove(teams, roles, roles, add: true);
 
             Assert.Equal(1, log.Changed); // only the owner team's assignment went through
             Assert.Single(log.Errors);
@@ -121,8 +121,31 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         }
 
         [Fact]
-        public void AssignOrRemove_MatchBu_ResolvesToTeamsBuCopy_AndSkipsTeamsWithNoCopy()
+        public void AssignOrRemove_ProbeSucceeds_AssignsExactRole_NoClassicBuWarning()
         {
+            // Modernized org: the exact-role Associate just works, so no probe/fallback is needed.
+            var fake = new FakeOrganizationService();
+            var team = fake.SeedTeam(Guid.NewGuid(), "Sales Team", RootBuId, "Root BU", "Owner");
+            var otherBuId = Guid.NewGuid();
+            var role = fake.SeedRole(Guid.NewGuid(), "Salesperson", otherBuId, "Other BU");
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var teamItem = sut.RetrieveTeams().Single();
+            var roles = sut.RetrieveRoles();
+
+            var log = sut.AssignOrRemove(new[] { teamItem }, roles, roles, add: true);
+
+            Assert.Equal(1, log.Changed);
+            Assert.Empty(log.ClassicBuDetected);
+            Assert.Contains(role.Id, sut.GetTeamRoleIds(team.Id));
+        }
+
+        [Fact]
+        public void AssignOrRemove_ProbeFaults_FallsBackToTeamsBuCopy_AndWarns()
+        {
+            // Classic-BU org: the exact-role (cross-BU) Associate faults; the same-BU copy
+            // then succeeds on retry, and the service reports it as a detected classic-BU team
+            // rather than silently switching or hard-failing.
             var fake = new FakeOrganizationService();
             var childBuId = Guid.NewGuid();
             var childTeam = fake.SeedTeam(Guid.NewGuid(), "Child BU Team", childBuId, "Child BU", "Owner");
@@ -134,17 +157,58 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             var childCopy = fake.SeedRole(Guid.NewGuid(), "Salesperson", childBuId, "Child BU", rootRoleId);
             // no copy seeded for otherBuId
 
+            // Simulate a classic-BU org: any cross-BU association (the root role onto a
+            // different-BU team) faults; same-BU associations succeed.
+            fake.FaultPredicate = (entityName, entityId, relationship, related) =>
+                related.Any(r => r.Id == rootRoleId);
+
             var sut = new TeamRoleAssignmentService(fake);
             var teams = sut.RetrieveTeams();
             var allRoles = sut.RetrieveRoles();
             var selected = new[] { allRoles.Single(r => r.Id == rootRole.Id) };
 
-            var log = sut.AssignOrRemove(teams, selected, allRoles, add: true, matchBu: true);
+            var log = sut.AssignOrRemove(teams, selected, allRoles, add: true);
 
             Assert.Equal(1, log.Changed);
-            Assert.Single(log.NoRoleInBu);
+            Assert.Single(log.ClassicBuDetected);
+            Assert.Contains("Child BU Team", log.ClassicBuDetected[0]);
+            Assert.Single(log.NoRoleInBu); // otherTeam has no BU copy to fall back to
             Assert.Contains(childCopy.Id, sut.GetTeamRoleIds(childTeam.Id));
             Assert.Empty(sut.GetTeamRoleIds(otherTeam.Id));
+        }
+
+        [Fact]
+        public void AssignOrRemove_ProbeFaults_ReRun_IsIdempotent_NoErrorOnSecondPass()
+        {
+            // Same classic-BU scenario as above, run twice: the second run must not error even
+            // though the exact-role Associate faults again - the fallback's BU copy is already
+            // assigned by then, so it should be reported as AlreadyPresent, not retried/faulted.
+            var fake = new FakeOrganizationService();
+            var childBuId = Guid.NewGuid();
+            var childTeam = fake.SeedTeam(Guid.NewGuid(), "Child BU Team", childBuId, "Child BU", "Owner");
+
+            var rootRoleId = Guid.NewGuid();
+            var rootRole = fake.SeedRole(rootRoleId, "Salesperson", RootBuId, "Root BU");
+            var childCopy = fake.SeedRole(Guid.NewGuid(), "Salesperson", childBuId, "Child BU", rootRoleId);
+
+            fake.FaultPredicate = (entityName, entityId, relationship, related) =>
+                related.Any(r => r.Id == rootRoleId);
+
+            var sut = new TeamRoleAssignmentService(fake);
+            var teams = sut.RetrieveTeams();
+            var allRoles = sut.RetrieveRoles();
+            var selected = new[] { allRoles.Single(r => r.Id == rootRole.Id) };
+
+            var firstRun = sut.AssignOrRemove(teams, selected, allRoles, add: true);
+            Assert.Equal(1, firstRun.Changed);
+            Assert.Empty(firstRun.Errors);
+
+            var secondRun = sut.AssignOrRemove(teams, selected, allRoles, add: true);
+
+            Assert.Equal(0, secondRun.Changed);
+            Assert.Empty(secondRun.Errors);
+            Assert.Single(secondRun.AlreadyPresent);
+            Assert.Contains(childCopy.Id, sut.GetTeamRoleIds(childTeam.Id));
         }
     }
 }

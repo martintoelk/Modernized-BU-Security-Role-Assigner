@@ -44,6 +44,13 @@ namespace BuMatrixSecurityRoleAssigner.Core
         public readonly List<string> NoRoleInBu = new List<string>();
         public readonly List<string> Errors = new List<string>();
 
+        /// <summary>
+        /// Populated when the exact-role (modernized) association faulted for a team and the
+        /// same-BU fallback then succeeded - i.e. auto-detected classic-BU behavior. Surfaced as
+        /// a warning rather than a silent behavior switch.
+        /// </summary>
+        public readonly List<string> ClassicBuDetected = new List<string>();
+
         public string Summary(bool add)
         {
             var sb = new StringBuilder();
@@ -57,6 +64,17 @@ namespace BuMatrixSecurityRoleAssigner.Core
                 sb.AppendLine($"Skipped {NotPresent.Count} that were not assigned.");
             if (NoRoleInBu.Count > 0)
                 sb.AppendLine($"Skipped {NoRoleInBu.Count} with no matching role copy in the team's business unit.");
+
+            if (ClassicBuDetected.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"WARNING: classic business-unit model detected for {ClassicBuDetected.Count} team(s) - " +
+                               "roles were matched to each team's own business unit instead of the exact role selected:");
+                foreach (var w in ClassicBuDetected.Take(15))
+                    sb.AppendLine("  - " + w);
+                if (ClassicBuDetected.Count > 15)
+                    sb.AppendLine($"  ...and {ClassicBuDetected.Count - 15} more.");
+            }
 
             if (Errors.Count > 0)
             {

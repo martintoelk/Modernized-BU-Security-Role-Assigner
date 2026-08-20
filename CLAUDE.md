@@ -12,7 +12,8 @@ list shows each role's **business unit**, and two actions: *Add roles to team(s)
 
 Built for the **modernized business units** (matrix data-access) model, where a team can hold
 security roles from any BU — so the default behavior assigns the exact role selected, keeping
-its BU. A legacy classic-BU code path exists behind an opt-in toggle (see Open decisions).
+its BU. A legacy classic-BU code path exists, auto-detected via a behavioral probe (ticket #12)
+rather than a manual toggle.
 
 ## Current status
 
@@ -47,10 +48,14 @@ a dev org is still outstanding.
   `teamroles`), via `IOrganizationService.Associate` / `Disassociate`.
 - **Default = assign exact role.** The role the user selects is associated as-is, whatever its
   BU. Correct for modernized BUs; this is the intended primary path.
-- **Classic path (opt-in toggle).** When enabled, each selected role is resolved to the copy in
-  the target team's BU. Resolution key is `parentrootroleid`, which is identical across all BU
-  copies of a logical role (`RootRoleId` in `RoleItem`; falls back to the role's own id for
-  root-BU roles). Teams with no copy of the role in their BU are skipped and reported.
+- **Classic path (auto-detected, ticket #12).** No manual toggle. The exact-role (modernized)
+  association is tried first; if it faults for a team, that's treated as the signature of a
+  classic-BU org and the role is resolved to the copy in the target team's BU, then retried
+  once. Resolution key is `parentrootroleid`, which is identical across all BU copies of a
+  logical role (`RootRoleId` in `RoleItem`; falls back to the role's own id for root-BU roles).
+  A successful retry is surfaced via `OperationLog.ClassicBuDetected` (a warning, never a silent
+  behavior switch). Teams with no copy of the role in their BU are skipped and reported under
+  `NoRoleInBu`.
 - **Idempotent.** Each team's current roles are read first (`GetTeamRoleIds`, link to
   `teamroles`), so add skips already-assigned pairs and remove skips not-assigned pairs — no
   duplicate-key errors, safe to re-run.
@@ -63,11 +68,11 @@ a dev org is still outstanding.
 
 ## Open decisions (need author input)
 
-1. **Keep or drop the classic-BU toggle?** Author leans modernized-only, which would let us
-   delete the toggle (`tsbMatchBu`), the `byRootBu` resolution, `RoleItem.RootRoleId`, the
-   `parentrootroleid` column in `RetrieveRoles`, and the `NoRoleInBu` log bucket. Do **not**
-   remove until confirmed — leaving it is low-cost insurance for any classic org. Ticket #7
-   deliberately kept this in place; a later ticket replaces it with auto-detection.
+1. ~~Keep or drop the classic-BU toggle?~~ Resolved in ticket #12: the manual `tsbMatchBu`
+   toggle is gone, replaced by auto-detection (behavioral probe: try the exact-role Associate
+   first, fall back to the team's own-BU copy on fault, and warn via `ClassicBuDetected`). The
+   `byRootBu` resolution, `RoleItem.RootRoleId`, and `NoRoleInBu` stay — they're the fallback's
+   resolution machinery, not toggle-only code.
 2. ~~Rename to match the repo?~~ Done in ticket #7: `TeamRoleManager` →
    `BuMatrixSecurityRoleAssigner` across namespace, `AssemblyName`, `RootNamespace`, plugin
    `Name`/`Description` metadata, DLL filename, and the nuspec.

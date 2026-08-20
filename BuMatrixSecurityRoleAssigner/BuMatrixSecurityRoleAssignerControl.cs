@@ -134,13 +134,10 @@ namespace BuMatrixSecurityRoleAssigner
                 return;
             }
 
-            // Default (modernized business units): assign the EXACT role selected, keeping its BU.
-            // Opt-in (classic model): resolve each role to the copy in the team's own BU.
-            var matchBu = tsbMatchBu.Checked;
-
+            // Classic-BU teams are auto-detected via a behavioral probe in the service, not a
+            // manual toggle; a successful fallback is surfaced afterwards via log.ClassicBuDetected.
             var confirm = MessageBox.Show(this,
-                $"{(add ? "Assign" : "Remove")} {roles.Count} role(s) {(add ? "to" : "from")} {teams.Count} team(s)?" +
-                (matchBu ? "\n\nClassic mode: each role will be matched to the team's own business unit." : ""),
+                $"{(add ? "Assign" : "Remove")} {roles.Count} role(s) {(add ? "to" : "from")} {teams.Count} team(s)?",
                 "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (confirm != DialogResult.Yes) return;
 
@@ -151,7 +148,7 @@ namespace BuMatrixSecurityRoleAssigner
                 {
                     var service = new TeamRoleAssignmentService(Service);
                     args.Result = service.AssignOrRemove(
-                        teams, roles, _allRoles, add, matchBu,
+                        teams, roles, _allRoles, add,
                         progress: message => SetWorkingMessage(message));
                 },
                 PostWorkCallBack = args =>
@@ -164,7 +161,9 @@ namespace BuMatrixSecurityRoleAssigner
                     }
 
                     var log = (OperationLog)args.Result;
-                    var icon = log.Errors.Count > 0 ? MessageBoxIcon.Warning : MessageBoxIcon.Information;
+                    var icon = log.Errors.Count > 0 || log.ClassicBuDetected.Count > 0
+                        ? MessageBoxIcon.Warning
+                        : MessageBoxIcon.Information;
                     MessageBox.Show(this, log.Summary(add), "Done", MessageBoxButtons.OK, icon);
                 }
             });

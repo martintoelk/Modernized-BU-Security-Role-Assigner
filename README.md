@@ -12,8 +12,8 @@ security roles from **any** business unit. This tool's default behavior takes ad
 that: it assigns the exact role you selected, keeping its own BU, so you can freely assign
 roles from a different BU than the team's.
 
-A legacy classic-BU compatibility path exists behind an opt-in toggle for orgs not yet on
-the modernized model.
+A legacy classic-BU compatibility path exists for orgs not yet on the modernized model,
+auto-detected at run time rather than a manual toggle.
 
 - Left list: every team, with its **Business Unit** and **team type** (multi-select).
 - Right list: every security role, with the **Business Unit** it belongs to (multi-select).
@@ -34,12 +34,14 @@ keeping whatever BU it belongs to. This is what you want on orgs with the modern
 data-access model, where a team can hold roles from any business unit. The BU column on the
 role list is there so you pick the right copy.
 
-**Classic model — the "Match role BU to team (classic)" toggle:** turn this on for orgs still
-on the classic BU model, where a role can only be associated with a team in its own BU. In that
-mode, for each team the plugin resolves the copy of the selected role that lives in the team's
-BU (matched via `parentrootroleid`, which is identical across all BU copies of a role). Teams
-whose BU has no copy of the role are skipped and reported under "no matching role copy in the
-team's business unit".
+**Classic model — auto-detected:** there's no manual toggle. The plugin always tries the exact
+role you selected first. If that association faults for a team (the signature of a classic-BU
+org, where a role can only be associated with a team in its own BU), it retries with the copy
+of that role in the team's own BU (matched via `parentrootroleid`, which is identical across
+all BU copies of a role) and reports the team in the summary under a "classic business-unit
+model detected" warning — never a silent behavior switch. Teams whose BU has no copy of the
+role to fall back to are skipped and reported under "no matching role copy in the team's
+business unit".
 
 Either way:
 - **Access teams** cannot hold security roles; those teams are reported as errors (the run

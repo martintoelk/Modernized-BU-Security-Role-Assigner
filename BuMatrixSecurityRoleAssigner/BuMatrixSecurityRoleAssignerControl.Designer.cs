@@ -9,8 +9,6 @@ namespace BuMatrixSecurityRoleAssigner
         private ToolStripButton tsbAdd;
         private ToolStripButton tsbRemove;
         private ToolStripSeparator sep1;
-        private ToolStripSeparator sep2;
-        private ToolStripButton tsbMatchBu;
 
         private SplitContainer split;
 
@@ -32,8 +30,6 @@ namespace BuMatrixSecurityRoleAssigner
             this.sep1 = new ToolStripSeparator();
             this.tsbAdd = new ToolStripButton();
             this.tsbRemove = new ToolStripButton();
-            this.sep2 = new ToolStripSeparator();
-            this.tsbMatchBu = new ToolStripButton();
 
             this.split = new SplitContainer();
 
@@ -63,20 +59,12 @@ namespace BuMatrixSecurityRoleAssigner
             this.tsbRemove.DisplayStyle = ToolStripItemDisplayStyle.Text;
             this.tsbRemove.Click += new System.EventHandler(this.tsbRemove_Click);
 
-            // Toggle: OFF = modernized BUs (assign the exact selected role, any BU).
-            //         ON  = classic model (match each role to the team's own BU).
-            this.tsbMatchBu.Text = "Match role BU to team (classic)";
-            this.tsbMatchBu.DisplayStyle = ToolStripItemDisplayStyle.Text;
-            this.tsbMatchBu.CheckOnClick = true;
-            this.tsbMatchBu.Checked = false;
-            this.tsbMatchBu.ToolTipText =
-                "Off (default): assign the exact role you selected, keeping its business unit " +
-                "(works with modernized business units).\r\n" +
-                "On: resolve each role to the copy in the team's own business unit (classic model).";
+            // Classic-BU handling is now auto-detected (behavioral probe in TeamRoleAssignmentService)
+            // rather than a manual toggle - see AssignOrRemove and OperationLog.ClassicBuDetected.
 
             this.toolStrip.Items.AddRange(new ToolStripItem[]
             {
-                this.tsbLoad, this.sep1, this.tsbAdd, this.tsbRemove, this.sep2, this.tsbMatchBu
+                this.tsbLoad, this.sep1, this.tsbAdd, this.tsbRemove
             });
             this.toolStrip.Location = new System.Drawing.Point(0, 0);
             this.toolStrip.GripStyle = ToolStripGripStyle.Hidden;

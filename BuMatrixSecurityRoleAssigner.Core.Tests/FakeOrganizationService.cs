@@ -27,11 +27,12 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             new Dictionary<string, Dictionary<Guid, Entity>>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// When set, called before every Associate/Disassociate; returning true simulates a
-        /// platform fault for that call (e.g. an Access Team rejecting a security-role
-        /// association), without changing any state.
+        /// When set, called before every Associate/Disassociate with the related entities being
+        /// (dis)associated; returning true simulates a platform fault for that call (e.g. an
+        /// Access Team rejecting a security-role association, or a classic-BU org rejecting a
+        /// cross-BU role association), without changing any state.
         /// </summary>
-        public Func<string, Guid, Relationship, bool> FaultPredicate { get; set; }
+        public Func<string, Guid, Relationship, EntityReferenceCollection, bool> FaultPredicate { get; set; }
 
         public Entity Seed(Entity entity)
         {
@@ -101,7 +102,7 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
 
         public void Associate(string entityName, Guid entityId, Relationship relationship, EntityReferenceCollection relatedEntities)
         {
-            if (FaultPredicate != null && FaultPredicate(entityName, entityId, relationship))
+            if (FaultPredicate != null && FaultPredicate(entityName, entityId, relationship, relatedEntities))
                 throw new InvalidOperationException(
                     $"Cannot associate: {entityName} {entityId} does not support the '{relationship.SchemaName}' relationship (simulated fault).");
 
@@ -123,7 +124,7 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
 
         public void Disassociate(string entityName, Guid entityId, Relationship relationship, EntityReferenceCollection relatedEntities)
         {
-            if (FaultPredicate != null && FaultPredicate(entityName, entityId, relationship))
+            if (FaultPredicate != null && FaultPredicate(entityName, entityId, relationship, relatedEntities))
                 throw new InvalidOperationException(
                     $"Cannot disassociate: {entityName} {entityId} does not support the '{relationship.SchemaName}' relationship (simulated fault).");
 
