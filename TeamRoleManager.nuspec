@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <!-- id/tags/dependency shape confirmed in ticket #4 (research):
+         github.com/martintoelk/Modernized-BU-Security-Role-Assigner/issues/4 -->
+    <id>BuMatrixSecurityRoleAssigner</id>
+    <version>$version$</version>
+    <title>BU Matrix Security Role Assigner</title>
+    <authors>Martin Tölk</authors>
+    <owners>martintoelk</owners>
+    <license type="expression">MIT</license>
+    <description>XrmToolBox plugin to bulk-assign and remove Dataverse security roles on teams and users, built for the modernized (matrix) business-units model.</description>
+    <projectUrl>https://github.com/martintoelk/Modernized-BU-Security-Role-Assigner</projectUrl>
+    <!-- Tags must start with the literal word "XrmToolBox" - that's how the store's crawler finds it. -->
+    <tags>XrmToolBox Plugins BuMatrixSecurityRoleAssigner SecurityRoles BusinessUnits</tags>
+    <dependencies>
+      <!-- "XrmToolBox" is a convention-only id (github.com/MscrmTools/XrmToolBox/wiki/
+           Distribute-your-plugins-through-XrmToolBox-and-NuGet) - it does not resolve as an
+           installable NuGet.org package (confirmed 404 on nuget.org/packages/XrmToolBox), so
+           nothing validates this at push time. It's read by XrmToolBox's own in-app updater as
+           "minimum host version this plugin was built/tested against". 1.2026.8.76 was the
+           latest host release as of 2026-08-20 (github.com/MscrmTools/XrmToolBox/releases) -
+           revisit once actually built/tested against a specific host build. -->
+      <dependency id="XrmToolBox" version="1.2026.8.76" />
+    </dependencies>
+  </metadata>
+  <files>
+    <!-- Plugin DLL must sit under a "Plugins" folder inside the package. -->
+    <file src="bin\Release\TeamRoleManager.dll" target="lib\net48\Plugins\TeamRoleManager.dll" />
+  </files>
+</package>

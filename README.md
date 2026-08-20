@@ -91,3 +91,7 @@ copying them can cause version conflicts. Restart XrmToolBox; the plugin appears
 | `TeamRoleManagerControl.Designer.cs` | WinForms UI |
 | `Models.cs` | `TeamItem`, `RoleItem`, `OperationLog` |
 | `TeamRoleManager.csproj` | SDK-style project (net48, WinForms) |
+
+## License
+
+[MIT](LICENSE)
