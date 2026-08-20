@@ -104,3 +104,13 @@ Restart XTB; the plugin appears as "Team Role Manager" (or the renamed value).
 - Prefer explicit, governed changes; don't guess entity/relationship names — the ones here
   (`team`, `role`, `teamroles`, `teamroles_association`, `parentrootroleid`, `businessunitid`,
   `teamtype`) are verified against the Dataverse schema.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`martintoelk/Modernized-BU-Security-Role-Assigner`), using the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
