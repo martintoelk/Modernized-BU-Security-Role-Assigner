@@ -1,8 +1,8 @@
 # Modernized BU Security Role Assigner — XrmToolBox plugin
 
-> **Preliminary / work in progress.** First cut of an XrmToolBox plugin for bulk-assigning
-> and removing Dataverse security roles. Not yet built or smoke-tested — see
-> [CLAUDE.md](CLAUDE.md) for full handover context and status.
+> Builds clean and is published on NuGet.org / the XrmToolBox Tool Library. A manual smoke
+> test against a live dev org is still outstanding — see [CLAUDE.md](CLAUDE.md) for full
+> handover context and status.
 
 An XrmToolBox plugin to bulk-assign or remove Dataverse security **roles** on **teams**
 (users planned — see Roadmap), built specifically for orgs on the **modernized business
@@ -24,8 +24,9 @@ auto-detected at run time rather than a manual toggle.
 
 - [x] Bulk assign/remove roles on teams
 - [ ] Bulk assign/remove roles on users
-- [ ] Plugin tile icon
-- [ ] First verified build + smoke test against a dev org
+- [x] Plugin tile icon
+- [x] First verified build
+- [ ] Smoke test against a dev org
 
 ## Business units
 

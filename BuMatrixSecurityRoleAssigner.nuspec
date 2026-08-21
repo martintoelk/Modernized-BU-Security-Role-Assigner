@@ -11,6 +11,7 @@
     <license type="expression">MIT</license>
     <description>XrmToolBox plugin to bulk-assign and remove Dataverse security roles on teams and users, built for the modernized (matrix) business-units model.</description>
     <projectUrl>https://github.com/martintoelk/Modernized-BU-Security-Role-Assigner</projectUrl>
+    <readme>README.md</readme>
     <!-- Tags must start with the literal word "XrmToolBox" - that's how the store's crawler finds it. -->
     <tags>XrmToolBox Plugins BuMatrixSecurityRoleAssigner SecurityRoles BusinessUnits</tags>
     <dependencies>
@@ -29,5 +30,6 @@
          dependency of the plugin DLL, so it needs to sit alongside it, not under Plugins. -->
     <file src="BuMatrixSecurityRoleAssigner\bin\Release\BuMatrixSecurityRoleAssigner.dll" target="lib\net48\Plugins\BuMatrixSecurityRoleAssigner.dll" />
     <file src="BuMatrixSecurityRoleAssigner\bin\Release\BuMatrixSecurityRoleAssigner.Core.dll" target="lib\net48\Plugins\BuMatrixSecurityRoleAssigner.Core.dll" />
+    <file src="README.md" target="README.md" />
   </files>
 </package>

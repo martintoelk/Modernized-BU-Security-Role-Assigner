@@ -14,7 +14,7 @@
     <!-- Keep the DLL name clean so it's easy to drop into the XTB Plugins folder -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Company>Martin Tölk</Company>
     <Product>BU Matrix Security Role Assigner</Product>
   </PropertyGroup>
