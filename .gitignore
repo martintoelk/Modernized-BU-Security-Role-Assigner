@@ -6,3 +6,7 @@ obj/
 # Personal automation script - not for the public repo
 ralph.ps1
 runs/
+
+# Wizard-captured secrets (NuGet API key, etc.) - never commit
+.env
+nupkg/
