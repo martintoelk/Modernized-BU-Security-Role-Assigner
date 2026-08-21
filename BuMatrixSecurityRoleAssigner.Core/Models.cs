@@ -66,6 +66,23 @@ namespace BuMatrixSecurityRoleAssigner.Core
         public EntityReference ToRef() => new EntityReference(Role.EntityLogicalName, Id);
     }
 
+    /// <summary>
+    /// Whether the connected org has modernized (matrix) business units switched on, per the
+    /// undocumented <c>EnableOwnershipAcrossBusinessUnits</c> OrgDBOrgSetting. Informational only
+    /// - see <see cref="TeamRoleAssignmentService.GetModernizedBuStatus"/>. Never used to gate
+    /// add/remove behavior; the behavioral probe in <see cref="TeamRoleAssignmentService.AssignOrRemove"/>
+    /// stays authoritative for that.
+    /// </summary>
+    public enum ModernizedBuStatus
+    {
+        /// <summary>The read failed (privilege, throttling, or an unparsable blob) or returned no organization row.</summary>
+        Unknown,
+        /// <summary><c>EnableOwnershipAcrossBusinessUnits</c> is absent or not "true".</summary>
+        No,
+        /// <summary><c>EnableOwnershipAcrossBusinessUnits</c> is present and "true".</summary>
+        Yes
+    }
+
     /// <summary>Collects what happened during an add/remove run so we can show a summary.</summary>
     public class OperationLog
     {

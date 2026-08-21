@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Xml.Linq;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using BuMatrixSecurityRoleAssigner.Core.Entities;
@@ -132,6 +133,54 @@ namespace BuMatrixSecurityRoleAssigner.Core
             while (ec.MoreRecords);
 
             return list;
+        }
+
+        /// <summary>
+        /// Informational only - reads the undocumented <c>EnableOwnershipAcrossBusinessUnits</c>
+        /// OrgDBOrgSetting from <c>organization.orgdborgsettings</c> to report whether the
+        /// connected org has modernized (matrix) business units switched on. There is no
+        /// generated early-bound entity for <c>organization</c> (an internal/undocumented column,
+        /// unlike the modeled entities used elsewhere in this class), so this queries it directly.
+        /// Never wired into add/remove: the behavioral probe in <see cref="AssignOrRemove"/> stays
+        /// authoritative for that, per docs/research/modernized-vs-classic-bu-detection.md.
+        /// Degrades to <see cref="ModernizedBuStatus.Unknown"/> rather than throwing - the read
+        /// requires elevated (System Administrator/System Customizer) privilege and the XML shape
+        /// is undocumented, so any failure here should never block Load.
+        /// </summary>
+        public ModernizedBuStatus GetModernizedBuStatus()
+        {
+            try
+            {
+                var query = new QueryExpression("organization")
+                {
+                    ColumnSet = new ColumnSet("orgdborgsettings"),
+                    PageInfo = new PagingInfo { Count = 1, PageNumber = 1 }
+                };
+                var org = _service.RetrieveMultiple(query).Entities.FirstOrDefault();
+                if (org == null)
+                    return ModernizedBuStatus.Unknown;
+
+                var xml = org.GetAttributeValue<string>("orgdborgsettings");
+                if (string.IsNullOrWhiteSpace(xml))
+                    return ModernizedBuStatus.No;
+
+                // Match by local name, not a namespace-qualified XName: the blob's shape is
+                // undocumented, and a default xmlns on its root would otherwise make Descendants(string)
+                // silently find nothing.
+                var value = XDocument.Parse(xml).Descendants()
+                    .FirstOrDefault(e => e.Name.LocalName == "EnableOwnershipAcrossBusinessUnits")?.Value?.Trim();
+                // OrgDBOrgSettings booleans appear as either "true" or "1" (see
+                // docs/research/modernized-vs-classic-bu-detection.md) - accept both.
+                return string.Equals(value, "true", StringComparison.OrdinalIgnoreCase) || value == "1"
+                    ? ModernizedBuStatus.Yes
+                    : ModernizedBuStatus.No;
+            }
+            catch (Exception)
+            {
+                // Privilege fault, throttling, or a future shape change in the undocumented blob -
+                // never let this fail the whole Load.
+                return ModernizedBuStatus.Unknown;
+            }
         }
 
         /// <summary>Role ids (BU-specific) currently associated with the given team.</summary>

@@ -70,7 +70,8 @@ namespace BuMatrixSecurityRoleAssigner
                     var teams = service.RetrieveTeams();
                     var users = service.RetrieveUsers();
                     var roles = service.RetrieveRoles();
-                    args.Result = Tuple.Create(teams, users, roles);
+                    var modernizedBuStatus = service.GetModernizedBuStatus();
+                    args.Result = Tuple.Create(teams, users, roles, modernizedBuStatus);
                 },
                 PostWorkCallBack = args =>
                 {
@@ -81,10 +82,11 @@ namespace BuMatrixSecurityRoleAssigner
                         return;
                     }
 
-                    var result = (Tuple<List<TeamItem>, List<UserItem>, List<RoleItem>>)args.Result;
+                    var result = (Tuple<List<TeamItem>, List<UserItem>, List<RoleItem>, ModernizedBuStatus>)args.Result;
                     _allTeams = result.Item1;
                     _allUsers = result.Item2;
                     _allRoles = result.Item3;
+                    lblModernizedBuStatus.Text = $"Modernized BUs: {result.Item4}";
                     PopulateTargetList();
                     PopulateRoleList();
                 }

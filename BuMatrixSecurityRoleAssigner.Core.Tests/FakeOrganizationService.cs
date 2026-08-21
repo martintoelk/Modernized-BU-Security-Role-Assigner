@@ -34,6 +34,13 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         /// </summary>
         public Func<string, Guid, Relationship, EntityReferenceCollection, bool> FaultPredicate { get; set; }
 
+        /// <summary>
+        /// When set and returns true for a given query, RetrieveMultiple throws instead of
+        /// running - simulates a privilege fault (e.g. reading the undocumented
+        /// `orgdborgsettings` column without System Administrator/System Customizer privilege).
+        /// </summary>
+        public Func<QueryExpression, bool> RetrieveMultipleFaultPredicate { get; set; }
+
         public Entity Seed(Entity entity)
         {
             if (entity.Id == Guid.Empty)
@@ -167,6 +174,9 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         {
             if (!(queryBase is QueryExpression query))
                 throw new NotSupportedException("FakeOrganizationService only supports QueryExpression.");
+
+            if (RetrieveMultipleFaultPredicate != null && RetrieveMultipleFaultPredicate(query))
+                throw new InvalidOperationException($"Cannot retrieve '{query.EntityName}' (simulated fault).");
 
             IEnumerable<Entity> rows = _tables.TryGetValue(query.EntityName, out var baseTable)
                 ? baseTable.Values

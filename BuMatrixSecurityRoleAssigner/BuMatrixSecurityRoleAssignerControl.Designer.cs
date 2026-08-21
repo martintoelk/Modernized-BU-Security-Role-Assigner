@@ -34,6 +34,7 @@ namespace BuMatrixSecurityRoleAssigner
 
         private StatusStrip statusStrip;
         private ToolStripStatusLabel lblStatus;
+        private ToolStripStatusLabel lblModernizedBuStatus;
 
         private void InitializeComponent()
         {
@@ -60,6 +61,7 @@ namespace BuMatrixSecurityRoleAssigner
 
             this.statusStrip = new StatusStrip();
             this.lblStatus = new ToolStripStatusLabel();
+            this.lblModernizedBuStatus = new ToolStripStatusLabel();
 
             this.SuspendLayout();
 
@@ -206,6 +208,10 @@ namespace BuMatrixSecurityRoleAssigner
             // ---- StatusStrip ----
             this.lblStatus.Text = "Click \"Load / Refresh\" after connecting to an environment.";
             this.statusStrip.Items.Add(this.lblStatus);
+            this.lblModernizedBuStatus.Text = "Modernized BUs: Unknown";
+            this.lblModernizedBuStatus.Spring = true;
+            this.lblModernizedBuStatus.TextAlign = ContentAlignment.MiddleRight;
+            this.statusStrip.Items.Add(this.lblModernizedBuStatus);
 
             // ---- Control ----
             this.Controls.Add(this.mainTable);
