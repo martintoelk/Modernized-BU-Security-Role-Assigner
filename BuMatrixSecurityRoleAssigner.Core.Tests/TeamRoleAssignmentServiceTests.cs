@@ -178,6 +178,45 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         }
 
         [Fact]
+        public void AssignOrRemove_MixedBatch_SameBuRoleFaultsAlongsideResolvableRole_StillAssignedOnRetry()
+        {
+            // A team selects two roles in one call: one it already has direct access to (its own-BU
+            // copy) and one that needs classic-BU resolution to a different-BU copy. The single
+            // Associate batch faults because of the second role; the first role must not be treated
+            // as collateral damage from that fault - it should be retried alone and succeed.
+            var fake = new FakeOrganizationService();
+            var childBuId = Guid.NewGuid();
+            var childTeam = fake.SeedTeam(Guid.NewGuid(), "Child BU Team", childBuId, "Child BU", "Owner");
+
+            var ownBuRole = fake.SeedRole(Guid.NewGuid(), "Marketing", childBuId, "Child BU");
+
+            var rootRoleId = Guid.NewGuid();
+            var rootRole = fake.SeedRole(rootRoleId, "Salesperson", RootBuId, "Root BU");
+            var childCopy = fake.SeedRole(Guid.NewGuid(), "Salesperson", childBuId, "Child BU", rootRoleId);
+
+            // Only the cross-BU root role faults; the team's own-BU role would succeed on its own.
+            fake.FaultPredicate = (entityName, entityId, relationship, related) =>
+                related.Any(r => r.Id == rootRoleId);
+
+            var sut = new TeamRoleAssignmentService(fake);
+            var teams = sut.RetrieveTeams();
+            var allRoles = sut.RetrieveRoles();
+            var selected = new[]
+            {
+                allRoles.Single(r => r.Id == ownBuRole.Id),
+                allRoles.Single(r => r.Id == rootRole.Id),
+            };
+
+            var log = sut.AssignOrRemove(teams, selected, allRoles, add: true);
+
+            Assert.Equal(2, log.Changed);
+            Assert.Empty(log.Errors);
+            Assert.Single(log.ClassicBuDetected);
+            Assert.Contains(ownBuRole.Id, sut.GetTeamRoleIds(childTeam.Id));
+            Assert.Contains(childCopy.Id, sut.GetTeamRoleIds(childTeam.Id));
+        }
+
+        [Fact]
         public void AssignOrRemove_ProbeFaults_ReRun_IsIdempotent_NoErrorOnSecondPass()
         {
             // Same classic-BU scenario as above, run twice: the second run must not error even

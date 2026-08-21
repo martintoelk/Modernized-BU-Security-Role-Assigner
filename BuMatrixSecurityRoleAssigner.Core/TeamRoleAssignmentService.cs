@@ -185,7 +185,7 @@ namespace BuMatrixSecurityRoleAssigner.Core
                     AssociateOrDisassociate(team.Id, targets.Select(r => r.ToRef()), add);
                     log.Changed += targets.Count;
                 }
-                catch (Exception ex)
+                catch (Exception)
                 {
                     // Probe result: either a genuine per-team fault (e.g. Access teams can't hold
                     // security roles) or a classic-BU mismatch. Retry resolving each faulted role
@@ -237,8 +237,22 @@ namespace BuMatrixSecurityRoleAssigner.Core
 
                     foreach (var role in noBuCopy)
                         log.NoRoleInBu.Add($"{team.Name} ({team.BusinessUnitName}) <- {role.Name}");
+
+                    // sameBu roles shared the failed batch with roles that may genuinely have needed
+                    // BU resolution, so the batch fault doesn't necessarily implicate them - retry
+                    // them alone to tell a real per-role error apart from collateral batch failure.
                     if (sameBu.Count > 0)
-                        log.Errors.Add($"{team.Name}: {ex.Message}");
+                    {
+                        try
+                        {
+                            AssociateOrDisassociate(team.Id, sameBu.Select(r => r.ToRef()), add);
+                            log.Changed += sameBu.Count;
+                        }
+                        catch (Exception exSameBu)
+                        {
+                            log.Errors.Add($"{team.Name}: {exSameBu.Message}");
+                        }
+                    }
 
                     if (resolved.Count == 0)
                         continue;
