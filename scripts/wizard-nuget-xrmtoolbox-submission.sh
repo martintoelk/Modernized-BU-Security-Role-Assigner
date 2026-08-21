@@ -277,14 +277,15 @@ say "admin review (docs say 'can take a few days')."
 open_url "https://www.xrmtoolbox.com/login/"
 step "Sign in, or create an account if you don't have one yet."
 pause "Signed in to the XrmToolBox portal?"
-open_url "https://www.xrmtoolbox.com/plugins/register/"
+open_url "https://www.xrmtoolbox.com/plugins/new/"
 step "Register the package id 'BuMatrixSecurityRoleAssigner' (must match the"
-step "  <id> in BuMatrixSecurityRoleAssigner.nuspec exactly)."
+step "  <id> in BuMatrixSecurityRoleAssigner.nuspec exactly) — the portal parses"
+step "  metadata straight from NuGet.org, no manual field entry needed."
 step "Submit for review."
 if confirm "Package id registered and submitted for review?"; then
   write_env XRMTOOLBOX_PACKAGE_REGISTERED "true"
 else
-  SKIPPED+=("register package id 'BuMatrixSecurityRoleAssigner' at xrmtoolbox.com/plugins/register/")
+  SKIPPED+=("register package id 'BuMatrixSecurityRoleAssigner' at xrmtoolbox.com/plugins/new/")
 fi
 note "Review turnaround is a few days per xrmtoolbox.com docs — no further action needed until then."
 

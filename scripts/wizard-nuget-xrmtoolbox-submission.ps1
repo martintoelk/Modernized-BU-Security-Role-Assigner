@@ -283,14 +283,15 @@ Say "admin review (docs say 'can take a few days')."
 Open-WizardUrl "https://www.xrmtoolbox.com/login/"
 Step "Sign in, or create an account if you don't have one yet."
 Wait-ForEnter "Signed in to the XrmToolBox portal?"
-Open-WizardUrl "https://www.xrmtoolbox.com/plugins/register/"
+Open-WizardUrl "https://www.xrmtoolbox.com/plugins/new/"
 Step "Register the package id 'BuMatrixSecurityRoleAssigner' (must match the"
-Step "  <id> in BuMatrixSecurityRoleAssigner.nuspec exactly)."
+Step "  <id> in BuMatrixSecurityRoleAssigner.nuspec exactly) - the portal parses"
+Step "  metadata straight from NuGet.org, no manual field entry needed."
 Step "Submit for review."
 if (Confirm-Wizard "Package id registered and submitted for review?") {
   Write-WizardEnv -Key 'XRMTOOLBOX_PACKAGE_REGISTERED' -Value 'true'
 } else {
-  $script:Skipped += "register package id 'BuMatrixSecurityRoleAssigner' at xrmtoolbox.com/plugins/register/"
+  $script:Skipped += "register package id 'BuMatrixSecurityRoleAssigner' at xrmtoolbox.com/plugins/new/"
 }
 Note "Review turnaround is a few days per xrmtoolbox.com docs - no further action needed until then."
 
