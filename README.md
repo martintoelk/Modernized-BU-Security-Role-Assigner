@@ -26,7 +26,7 @@ auto-detected at run time rather than a manual toggle.
 - [x] Bulk assign/remove roles on users
 - [x] Plugin tile icon
 - [x] First verified build
-- [ ] Smoke test against a dev org
+- [x] Smoke test against a dev org
 
 ## Business units
 

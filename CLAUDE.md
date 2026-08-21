@@ -22,7 +22,7 @@ Builds clean, split into `BuMatrixSecurityRoleAssigner.Core` (class library, no 
 dependency) and `BuMatrixSecurityRoleAssigner` (the thin XTB plugin project). Published on
 NuGet.org / the XrmToolBox Tool Library as `BuMatrixSecurityRoleAssigner`; the publish workflow
 passes the target version into the build so the shipped DLL's assembly version always matches
-the package version. A manual smoke test against a live dev org is still outstanding.
+the package version. Smoke-tested against a live dev org — successful.
 
 ## File map
 
@@ -111,10 +111,7 @@ on an already-published version).
 
 ## Suggested next steps for the CLI
 
-1. Smoke test on a dev org: load, multi-select teams/users + roles, add, verify via `teamroles`
-   / `systemuserroles`, remove, verify. Test an access team (expect a clean per-team error, not
-   a crash) and a cross-BU assignment (expect success on modernized BUs).
-2. Consider a short `CHANGELOG.md`.
+1. Consider a short `CHANGELOG.md`.
 
 ## Conventions
 
