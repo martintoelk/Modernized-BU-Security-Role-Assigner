@@ -11,11 +11,12 @@
     <license type="expression">MIT</license>
     <description>XrmToolBox plugin to bulk-assign and remove Dataverse security roles on teams and users, built for the modernized (matrix) business-units model.</description>
     <projectUrl>https://github.com/martintoelk/Modernized-BU-Security-Role-Assigner</projectUrl>
+    <!-- Confirmed via the NuGet v3 catalog API: with only <icon> set, nuget.org computes its
+         own hosted iconUrl (e.g. https://api.nuget.org/.../{version}/icon) once indexed - that's
+         the form validators accept. A prior attempt also set a custom <iconUrl> pointing at
+         raw.githubusercontent.com; nuget.org used that literal value instead of computing its
+         own, and the XrmToolBox portal validator rejected it as invalid. Don't re-add iconUrl. -->
     <icon>images\icon.png</icon>
-    <!-- nuget.org's own catalog API leaves "iconUrl" empty for packages that only use the
-         modern <icon> element - some third-party validators (incl. the XrmToolBox tool
-         portal) read that legacy field directly. Set both so all validators are satisfied. -->
-    <iconUrl>https://raw.githubusercontent.com/martintoelk/Modernized-BU-Security-Role-Assigner/master/nuget/icon.png</iconUrl>
     <readme>README.md</readme>
     <!-- Tags must start with the literal word "XrmToolBox" - that's how the store's crawler finds it. -->
     <tags>XrmToolBox Plugins BuMatrixSecurityRoleAssigner SecurityRoles BusinessUnits</tags>
