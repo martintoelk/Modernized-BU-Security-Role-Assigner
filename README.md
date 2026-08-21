@@ -1,9 +1,5 @@
 # Modernized BU Security Role Assigner — XrmToolBox plugin
 
-> Builds clean and is published on NuGet.org / the XrmToolBox Tool Library. A manual smoke
-> test against a live dev org is still outstanding — see [CLAUDE.md](CLAUDE.md) for full
-> handover context and status.
-
 An XrmToolBox plugin to bulk-assign or remove Dataverse security **roles** on **teams** or
 **users**, built specifically for orgs on the **modernized business units** (matrix
 data-access) model. Unlike the classic BU model, where a role can only be associated with a
