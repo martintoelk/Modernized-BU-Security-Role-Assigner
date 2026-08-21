@@ -11,7 +11,12 @@ namespace BuMatrixSecurityRoleAssigner
     {
         // Full, unfiltered caches. The list views are populated from these (with text filters applied).
         private List<TeamItem> _allTeams = new List<TeamItem>();
+        private List<UserItem> _allUsers = new List<UserItem>();
         private List<RoleItem> _allRoles = new List<RoleItem>();
+
+        // Teams vs Users - never mixed. tsbUsersMode.Checked is the single source of truth; this
+        // just makes call sites read as "which mode", not "which checkbox".
+        private bool UsersMode => tsbUsersMode.Checked;
 
         public BuMatrixSecurityRoleAssignerControl()
         {
@@ -48,7 +53,18 @@ namespace BuMatrixSecurityRoleAssigner
             return false;
         }
 
-        private void txtTeamFilter_TextChanged(object sender, EventArgs e) => PopulateTeamList();
+        private void txtTeamFilter_TextChanged(object sender, EventArgs e) => PopulateTargetList();
+
+        private void tsbUsersMode_CheckedChanged(object sender, EventArgs e)
+        {
+            tsbUsersMode.Text = UsersMode ? "Mode: Users" : "Mode: Teams";
+            lblTeams.Text = UsersMode ? "Users (multi-select)" : "Teams (multi-select)";
+
+            lvTeams.Columns[0].Text = UsersMode ? "User" : "Team";
+            lvTeams.Columns[2].Text = UsersMode ? "Disabled" : "Type";
+
+            PopulateTargetList();
+        }
 
         private void txtRoleFilter_TextChanged(object sender, EventArgs e) => PopulateRoleList();
 
@@ -58,13 +74,14 @@ namespace BuMatrixSecurityRoleAssigner
         {
             WorkAsync(new WorkAsyncInfo
             {
-                Message = "Loading teams and security roles...",
+                Message = "Loading teams, users and security roles...",
                 Work = (worker, args) =>
                 {
                     var service = new TeamRoleAssignmentService(Service);
                     var teams = service.RetrieveTeams();
+                    var users = service.RetrieveUsers();
                     var roles = service.RetrieveRoles();
-                    args.Result = Tuple.Create(teams, roles);
+                    args.Result = Tuple.Create(teams, users, roles);
                 },
                 PostWorkCallBack = args =>
                 {
@@ -75,10 +92,11 @@ namespace BuMatrixSecurityRoleAssigner
                         return;
                     }
 
-                    var result = (Tuple<List<TeamItem>, List<RoleItem>>)args.Result;
+                    var result = (Tuple<List<TeamItem>, List<UserItem>, List<RoleItem>>)args.Result;
                     _allTeams = result.Item1;
-                    _allRoles = result.Item2;
-                    PopulateTeamList();
+                    _allUsers = result.Item2;
+                    _allRoles = result.Item3;
+                    PopulateTargetList();
                     PopulateRoleList();
                 }
             });
@@ -93,19 +111,35 @@ namespace BuMatrixSecurityRoleAssigner
                                    f.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
-        private void PopulateTeamList()
+        private void PopulateTargetList()
         {
             var filter = txtTeamFilter.Text?.Trim();
             lvTeams.BeginUpdate();
             lvTeams.Items.Clear();
-            foreach (var t in _allTeams.Where(t => Match(filter, t.Name, t.BusinessUnitName)))
+
+            if (UsersMode)
             {
-                var item = new ListViewItem(t.Name);
-                item.SubItems.Add(t.BusinessUnitName);
-                item.SubItems.Add(t.TeamType);
-                item.Tag = t;
-                lvTeams.Items.Add(item);
+                foreach (var u in _allUsers.Where(u => Match(filter, u.Name, u.BusinessUnitName)))
+                {
+                    var item = new ListViewItem(u.Name);
+                    item.SubItems.Add(u.BusinessUnitName);
+                    item.SubItems.Add(u.IsDisabled ? "Yes" : "");
+                    item.Tag = u;
+                    lvTeams.Items.Add(item);
+                }
             }
+            else
+            {
+                foreach (var t in _allTeams.Where(t => Match(filter, t.Name, t.BusinessUnitName)))
+                {
+                    var item = new ListViewItem(t.Name);
+                    item.SubItems.Add(t.BusinessUnitName);
+                    item.SubItems.Add(t.TeamType);
+                    item.Tag = t;
+                    lvTeams.Items.Add(item);
+                }
+            }
+
             lvTeams.EndUpdate();
             UpdateStatus();
         }
@@ -128,12 +162,14 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void UpdateStatus()
         {
-            lblStatus.Text = $"Teams: {lvTeams.Items.Count} shown ({_allTeams.Count} total)   |   " +
+            var targetLabel = UsersMode ? "Users" : "Teams";
+            var targetTotal = UsersMode ? _allUsers.Count : _allTeams.Count;
+            lblStatus.Text = $"{targetLabel}: {lvTeams.Items.Count} shown ({targetTotal} total)   |   " +
                              $"Roles: {lvRoles.Items.Count} shown ({_allRoles.Count} total)";
         }
 
-        private List<TeamItem> GetSelectedTeams() =>
-            lvTeams.SelectedItems.Cast<ListViewItem>().Select(i => (TeamItem)i.Tag).ToList();
+        private List<IAssignmentTarget> GetSelectedTargets() =>
+            lvTeams.SelectedItems.Cast<ListViewItem>().Select(i => (IAssignmentTarget)i.Tag).ToList();
 
         private List<RoleItem> GetSelectedRoles() =>
             lvRoles.SelectedItems.Cast<ListViewItem>().Select(i => (RoleItem)i.Tag).ToList();
@@ -142,27 +178,28 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void AssignOrRemove(bool add)
         {
-            var teams = GetSelectedTeams();
+            var targets = GetSelectedTargets();
             var roles = GetSelectedRoles();
+            var targetLabel = UsersMode ? "user(s)" : "team(s)";
 
-            if (teams.Count == 0 || roles.Count == 0)
+            if (targets.Count == 0 || roles.Count == 0)
             {
-                MessageBox.Show(this, "Select at least one team and one role.", "Nothing to do",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, $"Select at least one {(UsersMode ? "user" : "team")} and one role.",
+                    "Nothing to do", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            // Classic-BU teams are auto-detected via a behavioral probe in the service, not a
+            // Classic-BU targets are auto-detected via a behavioral probe in the service, not a
             // manual toggle; a successful fallback is surfaced afterwards via log.ClassicBuDetected.
             var removeFromAllBus = !add && tsbRemoveAllBus.Checked;
             var warning = removeFromAllBus
-                ? "\n\nWARNING: \"Remove from all BUs\" is on - every business-unit copy of each " +
-                  "selected role currently assigned to the selected team(s) will be removed, not just " +
-                  "the row(s) you selected."
+                ? $"\n\nWARNING: \"Remove from all BUs\" is on - every business-unit copy of each " +
+                  $"selected role currently assigned to the selected {targetLabel} will be removed, not " +
+                  "just the row(s) you selected."
                 : "";
 
             var confirm = MessageBox.Show(this,
-                $"{(add ? "Assign" : "Remove")} {roles.Count} role(s) {(add ? "to" : "from")} {teams.Count} team(s)?" + warning,
+                $"{(add ? "Assign" : "Remove")} {roles.Count} role(s) {(add ? "to" : "from")} {targets.Count} {targetLabel}?" + warning,
                 "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (confirm != DialogResult.Yes) return;
 
@@ -173,7 +210,7 @@ namespace BuMatrixSecurityRoleAssigner
                 {
                     var service = new TeamRoleAssignmentService(Service);
                     args.Result = service.AssignOrRemove(
-                        teams, roles, _allRoles, add, removeFromAllBus,
+                        targets, roles, _allRoles, add, removeFromAllBus,
                         progress: message => SetWorkingMessage(message));
                 },
                 PostWorkCallBack = args =>

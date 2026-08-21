@@ -7,14 +7,45 @@ using BuMatrixSecurityRoleAssigner.Core.Entities;
 
 namespace BuMatrixSecurityRoleAssigner.Core
 {
-    /// <summary>A team row shown in the left list.</summary>
-    public class TeamItem
+    /// <summary>
+    /// A row that can hold security-role assignments - a team or a user. AssignOrRemove works
+    /// against either, dispatching the entity/relationship names from the instance rather than
+    /// having separate team/user code paths.
+    /// </summary>
+    public interface IAssignmentTarget
+    {
+        Guid Id { get; }
+        string Name { get; }
+        Guid BusinessUnitId { get; }
+        string BusinessUnitName { get; }
+        string EntityLogicalName { get; }
+        string RelationshipSchemaName { get; }
+    }
+
+    /// <summary>A team row shown in the target list.</summary>
+    public class TeamItem : IAssignmentTarget
     {
         public Guid Id { get; set; }
         public string Name { get; set; }
         public Guid BusinessUnitId { get; set; }
         public string BusinessUnitName { get; set; }
         public string TeamType { get; set; }   // formatted label: Owner / Access / AAD Security Group / AAD Office Group
+
+        public string EntityLogicalName => Entities.Team.EntityLogicalName;
+        public string RelationshipSchemaName => Entities.Team.Fields.teamroles_association;
+    }
+
+    /// <summary>A user row shown in the target list, in Users mode.</summary>
+    public class UserItem : IAssignmentTarget
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; }
+        public Guid BusinessUnitId { get; set; }
+        public string BusinessUnitName { get; set; }
+        public bool IsDisabled { get; set; }
+
+        public string EntityLogicalName => Entities.SystemUser.EntityLogicalName;
+        public string RelationshipSchemaName => Entities.SystemUser.Fields.systemuserroles_association;
     }
 
     /// <summary>A security role row shown in the right list.</summary>
@@ -51,6 +82,12 @@ namespace BuMatrixSecurityRoleAssigner.Core
         /// </summary>
         public readonly List<string> ClassicBuDetected = new List<string>();
 
+        /// <summary>
+        /// Populated (add only) when a role was assigned to a disabled user - not blocked, since
+        /// the user explicitly selected them, but surfaced so it's never a silent side effect.
+        /// </summary>
+        public readonly List<string> DisabledUserWarnings = new List<string>();
+
         public string Summary(bool add)
         {
             var sb = new StringBuilder();
@@ -64,6 +101,16 @@ namespace BuMatrixSecurityRoleAssigner.Core
                 sb.AppendLine($"Skipped {NotPresent.Count} that were not assigned.");
             if (NoRoleInBu.Count > 0)
                 sb.AppendLine($"Skipped {NoRoleInBu.Count} with no matching role copy in the team's business unit.");
+
+            if (DisabledUserWarnings.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine($"WARNING: {DisabledUserWarnings.Count} role assignment(s) went to a disabled user:");
+                foreach (var w in DisabledUserWarnings.Take(15))
+                    sb.AppendLine("  - " + w);
+                if (DisabledUserWarnings.Count > 15)
+                    sb.AppendLine($"  ...and {DisabledUserWarnings.Count - 15} more.");
+            }
 
             if (ClassicBuDetected.Count > 0)
             {

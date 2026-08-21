@@ -11,6 +11,7 @@ namespace BuMatrixSecurityRoleAssigner
         private ToolStripButton tsbAdd;
         private ToolStripButton tsbRemove;
         private ToolStripButton tsbRemoveAllBus;
+        private ToolStripButton tsbUsersMode;
 
         private SplitContainer split;
 
@@ -32,6 +33,7 @@ namespace BuMatrixSecurityRoleAssigner
             this.tsbAdd = new ToolStripButton();
             this.tsbRemove = new ToolStripButton();
             this.tsbRemoveAllBus = new ToolStripButton();
+            this.tsbUsersMode = new ToolStripButton();
 
             this.split = new SplitContainer();
 
@@ -52,6 +54,15 @@ namespace BuMatrixSecurityRoleAssigner
             this.tsbLoad.Text = "Load / Refresh";
             this.tsbLoad.DisplayStyle = ToolStripItemDisplayStyle.Text;
             this.tsbLoad.Click += new System.EventHandler(this.tsbLoad_Click);
+
+            // Mode toggle: off = Teams (default), on = Users. Switching swaps the target list's
+            // contents and columns - the two modes are never mixed in one Add/Remove call.
+            this.tsbUsersMode.Text = "Mode: Teams";
+            this.tsbUsersMode.DisplayStyle = ToolStripItemDisplayStyle.Text;
+            this.tsbUsersMode.CheckOnClick = true;
+            this.tsbUsersMode.Checked = false;
+            this.tsbUsersMode.ToolTipText = "Toggle between assigning roles to Teams or to Users.";
+            this.tsbUsersMode.CheckedChanged += new System.EventHandler(this.tsbUsersMode_CheckedChanged);
 
             this.tsbAdd.Text = "Add roles to team(s)";
             this.tsbAdd.Image = CreateGlyphIcon("+", Color.FromArgb(0, 130, 0));
@@ -86,7 +97,7 @@ namespace BuMatrixSecurityRoleAssigner
             // tsbRemoveAllBus sits left of them, on the left edge with tsbLoad.
             this.toolStrip.Items.AddRange(new ToolStripItem[]
             {
-                this.tsbLoad, this.tsbRemoveAllBus, this.tsbAdd, this.tsbRemove
+                this.tsbLoad, this.tsbUsersMode, this.tsbRemoveAllBus, this.tsbAdd, this.tsbRemove
             });
             this.toolStrip.Location = new System.Drawing.Point(0, 0);
             this.toolStrip.GripStyle = ToolStripGripStyle.Hidden;

@@ -270,6 +270,132 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         }
 
         [Fact]
+        public void RetrieveUsers_ReturnsSeededUsers_WithDisabledFlag()
+        {
+            var fake = new FakeOrganizationService();
+            fake.SeedUser(Guid.NewGuid(), "Alice Active", RootBuId, "Root BU");
+            fake.SeedUser(Guid.NewGuid(), "Bob Disabled", RootBuId, "Root BU", isDisabled: true);
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var users = sut.RetrieveUsers();
+
+            Assert.Equal(2, users.Count);
+            Assert.Contains(users, u => u.Name == "Alice Active" && !u.IsDisabled);
+            Assert.Contains(users, u => u.Name == "Bob Disabled" && u.IsDisabled);
+        }
+
+        [Fact]
+        public void AssignOrRemove_Users_AssignsExactRoleAndBu_AndSkipsAlreadyAssigned()
+        {
+            var fake = new FakeOrganizationService();
+            var user = fake.SeedUser(Guid.NewGuid(), "Alice", RootBuId, "Root BU");
+            var newRole = fake.SeedRole(Guid.NewGuid(), "Salesperson", RootBuId, "Root BU");
+            var alreadyAssignedRole = fake.SeedRole(Guid.NewGuid(), "Sales Manager", RootBuId, "Root BU");
+            fake.SeedUserRole(user.Id, alreadyAssignedRole.Id);
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var userItem = sut.RetrieveUsers().Single();
+            var roles = sut.RetrieveRoles();
+            var selected = roles.Where(r => r.Id == newRole.Id || r.Id == alreadyAssignedRole.Id).ToList();
+
+            var log = sut.AssignOrRemove(new[] { userItem }, selected, roles, add: true);
+
+            Assert.Equal(1, log.Changed);
+            Assert.Single(log.AlreadyPresent);
+            Assert.Empty(log.Errors);
+            var userRoles = sut.GetUserRoleIds(user.Id);
+            Assert.Contains(newRole.Id, userRoles);
+            Assert.Contains(alreadyAssignedRole.Id, userRoles);
+        }
+
+        [Fact]
+        public void AssignOrRemove_Users_Remove_RemovesAssignedRole_AndSkipsNotAssigned()
+        {
+            var fake = new FakeOrganizationService();
+            var user = fake.SeedUser(Guid.NewGuid(), "Alice", RootBuId, "Root BU");
+            var assignedRole = fake.SeedRole(Guid.NewGuid(), "Salesperson", RootBuId, "Root BU");
+            var neverAssignedRole = fake.SeedRole(Guid.NewGuid(), "Sales Manager", RootBuId, "Root BU");
+            fake.SeedUserRole(user.Id, assignedRole.Id);
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var userItem = sut.RetrieveUsers().Single();
+            var roles = sut.RetrieveRoles();
+            var selected = roles.Where(r => r.Id == assignedRole.Id || r.Id == neverAssignedRole.Id).ToList();
+
+            var log = sut.AssignOrRemove(new[] { userItem }, selected, roles, add: false);
+
+            Assert.Equal(1, log.Changed);
+            Assert.Single(log.NotPresent);
+            Assert.Empty(log.Errors);
+            Assert.DoesNotContain(assignedRole.Id, sut.GetUserRoleIds(user.Id));
+        }
+
+        [Fact]
+        public void AssignOrRemove_Add_DisabledUser_StillAssigns_ButWarns()
+        {
+            var fake = new FakeOrganizationService();
+            var user = fake.SeedUser(Guid.NewGuid(), "Bob Disabled", RootBuId, "Root BU", isDisabled: true);
+            var role = fake.SeedRole(Guid.NewGuid(), "Salesperson", RootBuId, "Root BU");
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var userItem = sut.RetrieveUsers().Single();
+            var roles = sut.RetrieveRoles();
+
+            var log = sut.AssignOrRemove(new[] { userItem }, roles, roles, add: true);
+
+            Assert.Equal(1, log.Changed);
+            Assert.Single(log.DisabledUserWarnings);
+            Assert.Contains("Bob Disabled", log.DisabledUserWarnings[0]);
+            Assert.Contains(role.Id, sut.GetUserRoleIds(user.Id));
+        }
+
+        [Fact]
+        public void AssignOrRemove_Remove_DisabledUser_DoesNotWarn()
+        {
+            var fake = new FakeOrganizationService();
+            var user = fake.SeedUser(Guid.NewGuid(), "Bob Disabled", RootBuId, "Root BU", isDisabled: true);
+            var role = fake.SeedRole(Guid.NewGuid(), "Salesperson", RootBuId, "Root BU");
+            fake.SeedUserRole(user.Id, role.Id);
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var userItem = sut.RetrieveUsers().Single();
+            var roles = sut.RetrieveRoles();
+
+            var log = sut.AssignOrRemove(new[] { userItem }, roles, roles, add: false);
+
+            Assert.Equal(1, log.Changed);
+            Assert.Empty(log.DisabledUserWarnings);
+        }
+
+        [Fact]
+        public void AssignOrRemove_Users_ProbeFaults_FallsBackToUsersBuCopy_AndWarns()
+        {
+            // Same classic-BU behavioral probe as the team path, exercised for a user target -
+            // proves the shared AssignOrRemove/AssociateOrDisassociate logic isn't team-only.
+            var fake = new FakeOrganizationService();
+            var childBuId = Guid.NewGuid();
+            var user = fake.SeedUser(Guid.NewGuid(), "Alice", childBuId, "Child BU");
+
+            var rootRoleId = Guid.NewGuid();
+            var rootRole = fake.SeedRole(rootRoleId, "Salesperson", RootBuId, "Root BU");
+            var childCopy = fake.SeedRole(Guid.NewGuid(), "Salesperson", childBuId, "Child BU", rootRoleId);
+
+            fake.FaultPredicate = (entityName, entityId, relationship, related) =>
+                related.Any(r => r.Id == rootRoleId);
+
+            var sut = new TeamRoleAssignmentService(fake);
+            var userItem = sut.RetrieveUsers().Single();
+            var allRoles = sut.RetrieveRoles();
+            var selected = new[] { allRoles.Single(r => r.Id == rootRole.Id) };
+
+            var log = sut.AssignOrRemove(new[] { userItem }, selected, allRoles, add: true);
+
+            Assert.Equal(1, log.Changed);
+            Assert.Single(log.ClassicBuDetected);
+            Assert.Contains(childCopy.Id, sut.GetUserRoleIds(user.Id));
+        }
+
+        [Fact]
         public void AssignOrRemove_ProbeFaults_ReRun_IsIdempotent_NoErrorOnSecondPass()
         {
             // Same classic-BU scenario as above, run twice: the second run must not error even

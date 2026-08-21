@@ -70,6 +70,23 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             Seed(row);
         }
 
+        public Entity SeedUser(Guid id, string fullName, Guid businessUnitId, string businessUnitName, bool isDisabled = false)
+        {
+            var user = new Entity("systemuser", id) { ["fullname"] = fullName, ["isdisabled"] = isDisabled };
+            if (businessUnitId != Guid.Empty)
+                user["businessunitid"] = new EntityReference("businessunit", businessUnitId) { Name = businessUnitName };
+            return Seed(user);
+        }
+
+        /// <summary>Directly seeds a systemuserroles intersect row, bypassing Associate (for arrange-time setup).</summary>
+        public void SeedUserRole(Guid userId, Guid roleId)
+        {
+            var row = new Entity("systemuserroles", Guid.NewGuid());
+            row["systemuserid"] = userId;
+            row["roleid"] = roleId;
+            Seed(row);
+        }
+
         public Guid Create(Entity entity)
         {
             if (entity.Id == Guid.Empty)

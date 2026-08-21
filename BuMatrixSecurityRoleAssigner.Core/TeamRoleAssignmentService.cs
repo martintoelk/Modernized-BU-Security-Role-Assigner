@@ -16,8 +16,6 @@ namespace BuMatrixSecurityRoleAssigner.Core
     /// </summary>
     public class TeamRoleAssignmentService
     {
-        private const string TeamRolesRelationship = Team.Fields.teamroles_association;
-
         private readonly IOrganizationService _service;
 
         public TeamRoleAssignmentService(IOrganizationService service)
@@ -51,6 +49,45 @@ namespace BuMatrixSecurityRoleAssigner.Core
                         TeamType = t.FormattedValues.ContainsKey(Team.Fields.TeamType)
                             ? t.FormattedValues[Team.Fields.TeamType]
                             : string.Empty
+                    });
+                }
+                query.PageInfo.PageNumber++;
+                query.PageInfo.PagingCookie = ec.PagingCookie;
+            }
+            while (ec.MoreRecords);
+
+            return list;
+        }
+
+        /// <summary>
+        /// Users mode: analogous to <see cref="RetrieveTeams"/>. Disabled users are included, not
+        /// excluded - flagged via <see cref="UserItem.IsDisabled"/> so the caller can warn rather
+        /// than silently letting a role get assigned to a disabled account.
+        /// </summary>
+        public List<UserItem> RetrieveUsers()
+        {
+            var query = new QueryExpression(SystemUser.EntityLogicalName)
+            {
+                ColumnSet = new ColumnSet(SystemUser.Fields.FullName, SystemUser.Fields.BusinessUnitId, SystemUser.Fields.IsDisabled),
+                PageInfo = new PagingInfo { Count = 5000, PageNumber = 1 }
+            };
+            query.AddOrder(SystemUser.Fields.FullName, OrderType.Ascending);
+
+            var list = new List<UserItem>();
+            EntityCollection ec;
+            do
+            {
+                ec = _service.RetrieveMultiple(query);
+                foreach (var u in ec.Entities.Select(e => e.ToEntity<SystemUser>()))
+                {
+                    var bu = u.BusinessUnitId;
+                    list.Add(new UserItem
+                    {
+                        Id = u.Id,
+                        Name = u.FullName,
+                        BusinessUnitId = bu?.Id ?? Guid.Empty,
+                        BusinessUnitName = bu?.Name ?? string.Empty,
+                        IsDisabled = u.IsDisabled ?? false
                     });
                 }
                 query.PageInfo.PageNumber++;
@@ -111,8 +148,28 @@ namespace BuMatrixSecurityRoleAssigner.Core
             return new HashSet<Guid>(result.Entities.Select(e => e.Id));
         }
 
+        /// <summary>Role ids (BU-specific) currently associated with the given user.</summary>
+        public HashSet<Guid> GetUserRoleIds(Guid userId)
+        {
+            var query = new QueryExpression(Role.EntityLogicalName)
+            {
+                ColumnSet = new ColumnSet(Role.Fields.RoleId)
+            };
+            var link = query.AddLink(SystemUserRoles.EntityLogicalName, Role.Fields.RoleId, SystemUserRoles.Fields.RoleId);
+            link.LinkCriteria.AddCondition(SystemUserRoles.Fields.SystemUserId, ConditionOperator.Equal, userId);
+
+            var result = _service.RetrieveMultiple(query);
+            return new HashSet<Guid>(result.Entities.Select(e => e.Id));
+        }
+
+        private HashSet<Guid> GetExistingRoleIds(IAssignmentTarget target) =>
+            target.EntityLogicalName == Team.EntityLogicalName
+                ? GetTeamRoleIds(target.Id)
+                : GetUserRoleIds(target.Id);
+
         /// <summary>
-        /// Assigns or removes <paramref name="selectedRoles"/> for each of <paramref name="teams"/>.
+        /// Assigns or removes <paramref name="selectedRoles"/> for each of <paramref name="targets"/>
+        /// - teams or users, not mixed within one call (mode is decided by the caller).
         /// Default (modernized business units): the exact role selected is associated as-is,
         /// keeping its own business unit. Classic-BU orgs/teams are auto-detected via a
         /// behavioral probe, not a manual toggle: if the exact-role association faults for a
@@ -131,14 +188,14 @@ namespace BuMatrixSecurityRoleAssigner.Core
         /// </para>
         /// </summary>
         public OperationLog AssignOrRemove(
-            IReadOnlyList<TeamItem> teams,
+            IReadOnlyList<IAssignmentTarget> targets,
             IReadOnlyList<RoleItem> selectedRoles,
             IReadOnlyList<RoleItem> allRoles,
             bool add,
             bool removeFromAllBus = false,
             Action<string> progress = null)
         {
-            if (teams == null) throw new ArgumentNullException(nameof(teams));
+            if (targets == null) throw new ArgumentNullException(nameof(targets));
             if (selectedRoles == null) throw new ArgumentNullException(nameof(selectedRoles));
             if (allRoles == null) throw new ArgumentNullException(nameof(allRoles));
 
@@ -154,25 +211,28 @@ namespace BuMatrixSecurityRoleAssigner.Core
             var log = new OperationLog();
             var n = 0;
 
-            foreach (var team in teams)
+            foreach (var target in targets)
             {
                 n++;
-                progress?.Invoke($"Processing team {n}/{teams.Count}: {team.Name}");
+                progress?.Invoke($"Processing {n}/{targets.Count}: {target.Name}");
+
+                if (add && target is UserItem { IsDisabled: true })
+                    log.DisabledUserWarnings.Add(target.Name);
 
                 HashSet<Guid> existing;
                 try
                 {
-                    existing = GetTeamRoleIds(team.Id);
+                    existing = GetExistingRoleIds(target);
                 }
                 catch (Exception ex)
                 {
-                    log.Errors.Add($"{team.Name}: could not read existing roles ({ex.Message})");
+                    log.Errors.Add($"{target.Name}: could not read existing roles ({ex.Message})");
                     continue;
                 }
 
                 // Modernized default: assign/remove exactly what the user picked, whatever its BU -
                 // unless removeFromAllBus widens each selection to every BU copy of that logical role.
-                var targets = new List<RoleItem>();
+                var roleTargets = new List<RoleItem>();
                 var queuedIds = new HashSet<Guid>();
                 foreach (var role in selectedRoles)
                 {
@@ -190,51 +250,51 @@ namespace BuMatrixSecurityRoleAssigner.Core
                         if (add)
                         {
                             if (existing.Contains(row.Id))
-                                log.AlreadyPresent.Add($"{team.Name} <- {row.Name}");
+                                log.AlreadyPresent.Add($"{target.Name} <- {row.Name}");
                             else
-                                targets.Add(row);
+                                roleTargets.Add(row);
                         }
                         else
                         {
                             if (!existing.Contains(row.Id))
-                                log.NotPresent.Add($"{team.Name} <- {row.Name}");
+                                log.NotPresent.Add($"{target.Name} <- {row.Name}");
                             else
-                                targets.Add(row);
+                                roleTargets.Add(row);
                         }
                     }
                 }
 
-                if (targets.Count == 0)
+                if (roleTargets.Count == 0)
                     continue;
 
                 try
                 {
-                    AssociateOrDisassociate(team.Id, targets.Select(r => r.ToRef()), add);
-                    log.Changed += targets.Count;
+                    AssociateOrDisassociate(target, roleTargets.Select(r => r.ToRef()), add);
+                    log.Changed += roleTargets.Count;
                 }
                 catch (Exception)
                 {
-                    // Probe result: either a genuine per-team fault (e.g. Access teams can't hold
-                    // security roles) or a classic-BU mismatch. Retry resolving each faulted role
-                    // to this team's own BU copy; a successful retry confirms classic-BU behavior.
-                    // Roles split three ways:
+                    // Probe result: either a genuine per-target fault (e.g. Access teams can't hold
+                    // security roles, or an anti-elevation check on user role assignment) or a
+                    // classic-BU mismatch. Retry resolving each faulted role to this target's own BU
+                    // copy; a successful retry confirms classic-BU behavior. Roles split three ways:
                     //  - resolved: a distinct BU copy exists and isn't already in the state we
                     //    want (add: not yet assigned; remove: currently assigned) - worth retrying.
-                    //  - noBuCopy: no copy of this logical role exists in this team's BU at all -
+                    //  - noBuCopy: no copy of this logical role exists in this target's BU at all -
                     //    a genuine "nothing to fall back to", reported as NoRoleInBu.
-                    //  - sameBu: the "closest" copy IS the one we already tried (team is already in
+                    //  - sameBu: the "closest" copy IS the one we already tried (target is already in
                     //    that role's BU) - the fault isn't a BU mismatch, so it's a real error
-                    //    (e.g. Access team), not a BU-copy gap.
+                    //    (e.g. Access team, or an anti-elevation rejection), not a BU-copy gap.
                     // The BU-copy's own id (not the originally-selected role's id) is what's checked
                     // against `existing` here - it's the actual row that would be (dis)associated,
                     // and may already be in the wanted state from a prior run (idempotency).
                     var resolved = new List<RoleItem>();
                     var noBuCopy = new List<RoleItem>();
                     var sameBu = new List<RoleItem>();
-                    foreach (var role in targets)
+                    foreach (var role in roleTargets)
                     {
                         if (!byRootBu.TryGetValue(role.RootRoleId, out var buMap) ||
-                            !buMap.TryGetValue(team.BusinessUnitId, out var buCopy))
+                            !buMap.TryGetValue(target.BusinessUnitId, out var buCopy))
                         {
                             noBuCopy.Add(role);
                             continue;
@@ -249,21 +309,21 @@ namespace BuMatrixSecurityRoleAssigner.Core
                         if (add)
                         {
                             if (existing.Contains(buCopy.Id))
-                                log.AlreadyPresent.Add($"{team.Name} <- {buCopy.Name}");
+                                log.AlreadyPresent.Add($"{target.Name} <- {buCopy.Name}");
                             else
                                 resolved.Add(buCopy);
                         }
                         else
                         {
                             if (!existing.Contains(buCopy.Id))
-                                log.NotPresent.Add($"{team.Name} <- {buCopy.Name}");
+                                log.NotPresent.Add($"{target.Name} <- {buCopy.Name}");
                             else
                                 resolved.Add(buCopy);
                         }
                     }
 
                     foreach (var role in noBuCopy)
-                        log.NoRoleInBu.Add($"{team.Name} ({team.BusinessUnitName}) <- {role.Name}");
+                        log.NoRoleInBu.Add($"{target.Name} ({target.BusinessUnitName}) <- {role.Name}");
 
                     // sameBu roles shared the failed batch with roles that may genuinely have needed
                     // BU resolution, so the batch fault doesn't necessarily implicate them - retry
@@ -272,12 +332,12 @@ namespace BuMatrixSecurityRoleAssigner.Core
                     {
                         try
                         {
-                            AssociateOrDisassociate(team.Id, sameBu.Select(r => r.ToRef()), add);
+                            AssociateOrDisassociate(target, sameBu.Select(r => r.ToRef()), add);
                             log.Changed += sameBu.Count;
                         }
                         catch (Exception exSameBu)
                         {
-                            log.Errors.Add($"{team.Name}: {exSameBu.Message}");
+                            log.Errors.Add($"{target.Name}: {exSameBu.Message}");
                         }
                     }
 
@@ -286,14 +346,14 @@ namespace BuMatrixSecurityRoleAssigner.Core
 
                     try
                     {
-                        AssociateOrDisassociate(team.Id, resolved.Select(r => r.ToRef()), add);
+                        AssociateOrDisassociate(target, resolved.Select(r => r.ToRef()), add);
                         log.Changed += resolved.Count;
                         log.ClassicBuDetected.Add(
-                            $"{team.Name} ({team.BusinessUnitName}): matched {resolved.Count} role(s) to the team's own business unit.");
+                            $"{target.Name} ({target.BusinessUnitName}): matched {resolved.Count} role(s) to the target's own business unit.");
                     }
                     catch (Exception ex2)
                     {
-                        log.Errors.Add($"{team.Name}: {ex2.Message}");
+                        log.Errors.Add($"{target.Name}: {ex2.Message}");
                     }
                 }
             }
@@ -301,13 +361,14 @@ namespace BuMatrixSecurityRoleAssigner.Core
             return log;
         }
 
-        private void AssociateOrDisassociate(Guid teamId, IEnumerable<EntityReference> roleRefs, bool add)
+        private void AssociateOrDisassociate(IAssignmentTarget target, IEnumerable<EntityReference> roleRefs, bool add)
         {
             var refs = new EntityReferenceCollection(roleRefs.ToList());
+            var relationship = new Relationship(target.RelationshipSchemaName);
             if (add)
-                _service.Associate(Team.EntityLogicalName, teamId, new Relationship(TeamRolesRelationship), refs);
+                _service.Associate(target.EntityLogicalName, target.Id, relationship, refs);
             else
-                _service.Disassociate(Team.EntityLogicalName, teamId, new Relationship(TeamRolesRelationship), refs);
+                _service.Disassociate(target.EntityLogicalName, target.Id, relationship, refs);
         }
     }
 }
