@@ -99,6 +99,59 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         }
 
         [Fact]
+        public void AssignOrRemove_Remove_Default_OnlyRemovesSelectedBuCopy_LeavesOtherCopiesAssigned()
+        {
+            var fake = new FakeOrganizationService();
+            var team = fake.SeedTeam(Guid.NewGuid(), "Sales Team", RootBuId, "Root BU", "Owner");
+            var rootRoleId = Guid.NewGuid();
+            var rootCopy = fake.SeedRole(rootRoleId, "Salesperson", RootBuId, "Root BU");
+            var childBuId = Guid.NewGuid();
+            var childCopy = fake.SeedRole(Guid.NewGuid(), "Salesperson", childBuId, "Child BU", rootRoleId);
+            fake.SeedTeamRole(team.Id, rootCopy.Id);
+            fake.SeedTeamRole(team.Id, childCopy.Id);
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var teamItem = sut.RetrieveTeams().Single();
+            var allRoles = sut.RetrieveRoles();
+            var selected = allRoles.Where(r => r.Id == rootCopy.Id).ToList();
+
+            var log = sut.AssignOrRemove(new[] { teamItem }, selected, allRoles, add: false);
+
+            Assert.Equal(1, log.Changed);
+            var remaining = sut.GetTeamRoleIds(team.Id);
+            Assert.DoesNotContain(rootCopy.Id, remaining);
+            Assert.Contains(childCopy.Id, remaining);
+        }
+
+        [Fact]
+        public void AssignOrRemove_RemoveFromAllBus_RemovesEveryBuCopyPresentOnTeam_AndSkipsAbsentOnes()
+        {
+            var fake = new FakeOrganizationService();
+            var team = fake.SeedTeam(Guid.NewGuid(), "Sales Team", RootBuId, "Root BU", "Owner");
+            var rootRoleId = Guid.NewGuid();
+            var rootCopy = fake.SeedRole(rootRoleId, "Salesperson", RootBuId, "Root BU");
+            var childBuId = Guid.NewGuid();
+            var childCopy = fake.SeedRole(Guid.NewGuid(), "Salesperson", childBuId, "Child BU", rootRoleId);
+            var otherBuId = Guid.NewGuid();
+            fake.SeedRole(Guid.NewGuid(), "Salesperson", otherBuId, "Other BU", rootRoleId);
+            fake.SeedTeamRole(team.Id, rootCopy.Id);
+            fake.SeedTeamRole(team.Id, childCopy.Id);
+            // The otherBuId copy is never assigned to the team - should be reported as
+            // not-present, not an error.
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var teamItem = sut.RetrieveTeams().Single();
+            var allRoles = sut.RetrieveRoles();
+            var selected = allRoles.Where(r => r.Id == rootCopy.Id).ToList();
+
+            var log = sut.AssignOrRemove(new[] { teamItem }, selected, allRoles, add: false, removeFromAllBus: true);
+
+            Assert.Equal(2, log.Changed);
+            Assert.Single(log.NotPresent);
+            Assert.Empty(sut.GetTeamRoleIds(team.Id));
+        }
+
+        [Fact]
         public void AssignOrRemove_Add_AccessTeamFault_IsCapturedPerTeam_NotFatal()
         {
             var fake = new FakeOrganizationService();

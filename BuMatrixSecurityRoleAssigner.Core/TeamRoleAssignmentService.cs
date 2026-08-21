@@ -122,12 +122,20 @@ namespace BuMatrixSecurityRoleAssigner.Core
         /// successful retry is surfaced as a warning (<see cref="OperationLog.ClassicBuDetected"/>),
         /// never a silent behavior switch; if the retry can't resolve a BU copy or also faults,
         /// the original error/skip is reported as before.
+        /// <para>
+        /// Remove-only, default off: <paramref name="removeFromAllBus"/>. Normal remove only touches
+        /// the exact role row(s) selected (one BU copy per selection). When on, each selected role is
+        /// widened to every BU copy sharing its <see cref="RoleItem.RootRoleId"/> and every copy
+        /// currently assigned to the team is removed, not just the row picked in the list - a wider
+        /// blast radius, so the caller should confirm first.
+        /// </para>
         /// </summary>
         public OperationLog AssignOrRemove(
             IReadOnlyList<TeamItem> teams,
             IReadOnlyList<RoleItem> selectedRoles,
             IReadOnlyList<RoleItem> allRoles,
             bool add,
+            bool removeFromAllBus = false,
             Action<string> progress = null)
         {
             if (teams == null) throw new ArgumentNullException(nameof(teams));
@@ -137,6 +145,11 @@ namespace BuMatrixSecurityRoleAssigner.Core
             // Index every role copy by (root role, business unit), for the classic-BU fallback.
             var byRootBu = allRoles.GroupBy(r => r.RootRoleId)
                                     .ToDictionary(g => g.Key, g => g.ToDictionary(r => r.BusinessUnitId, r => r));
+
+            // Only needed for "remove from all BUs": every role copy sharing a root role, as a list.
+            var byRootAll = !add && removeFromAllBus
+                ? allRoles.GroupBy(r => r.RootRoleId).ToDictionary(g => g.Key, g => g.ToList())
+                : null;
 
             var log = new OperationLog();
             var n = 0;
@@ -157,23 +170,37 @@ namespace BuMatrixSecurityRoleAssigner.Core
                     continue;
                 }
 
-                // Modernized default: assign/remove exactly what the user picked, whatever its BU.
+                // Modernized default: assign/remove exactly what the user picked, whatever its BU -
+                // unless removeFromAllBus widens each selection to every BU copy of that logical role.
                 var targets = new List<RoleItem>();
+                var queuedIds = new HashSet<Guid>();
                 foreach (var role in selectedRoles)
                 {
-                    if (add)
+                    var rows = removeFromAllBus && byRootAll.TryGetValue(role.RootRoleId, out var copies)
+                        ? copies
+                        : new List<RoleItem> { role };
+
+                    foreach (var row in rows)
                     {
-                        if (existing.Contains(role.Id))
-                            log.AlreadyPresent.Add($"{team.Name} <- {role.Name}");
+                        // Two selected rows can widen to the same target (e.g. two BU copies of the
+                        // same role both selected) - skip dupes so we don't queue it twice.
+                        if (!queuedIds.Add(row.Id))
+                            continue;
+
+                        if (add)
+                        {
+                            if (existing.Contains(row.Id))
+                                log.AlreadyPresent.Add($"{team.Name} <- {row.Name}");
+                            else
+                                targets.Add(row);
+                        }
                         else
-                            targets.Add(role);
-                    }
-                    else
-                    {
-                        if (!existing.Contains(role.Id))
-                            log.NotPresent.Add($"{team.Name} <- {role.Name}");
-                        else
-                            targets.Add(role);
+                        {
+                            if (!existing.Contains(row.Id))
+                                log.NotPresent.Add($"{team.Name} <- {row.Name}");
+                            else
+                                targets.Add(row);
+                        }
                     }
                 }
 

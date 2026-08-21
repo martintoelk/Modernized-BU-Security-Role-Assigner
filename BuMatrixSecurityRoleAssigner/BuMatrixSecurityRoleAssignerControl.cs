@@ -26,9 +26,27 @@ namespace BuMatrixSecurityRoleAssigner
             ExecuteMethod(LoadData);
         }
 
-        private void tsbAdd_Click(object sender, EventArgs e) => ExecuteMethod(() => AssignOrRemove(add: true));
+        private void tsbAdd_Click(object sender, EventArgs e)
+        {
+            if (!RequireConnection()) return;
+            ExecuteMethod(() => AssignOrRemove(add: true));
+        }
 
-        private void tsbRemove_Click(object sender, EventArgs e) => ExecuteMethod(() => AssignOrRemove(add: false));
+        private void tsbRemove_Click(object sender, EventArgs e)
+        {
+            if (!RequireConnection()) return;
+            ExecuteMethod(() => AssignOrRemove(add: false));
+        }
+
+        // Only "Load / Refresh" should prompt the connect dialog. Add/Remove need an existing
+        // connection (and loaded data) and just tell the user to use Load instead of connecting.
+        private bool RequireConnection()
+        {
+            if (Service != null) return true;
+            MessageBox.Show(this, "Connect to an environment and click \"Load / Refresh\" first.",
+                "Not connected", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return false;
+        }
 
         private void txtTeamFilter_TextChanged(object sender, EventArgs e) => PopulateTeamList();
 
@@ -136,8 +154,15 @@ namespace BuMatrixSecurityRoleAssigner
 
             // Classic-BU teams are auto-detected via a behavioral probe in the service, not a
             // manual toggle; a successful fallback is surfaced afterwards via log.ClassicBuDetected.
+            var removeFromAllBus = !add && tsbRemoveAllBus.Checked;
+            var warning = removeFromAllBus
+                ? "\n\nWARNING: \"Remove from all BUs\" is on - every business-unit copy of each " +
+                  "selected role currently assigned to the selected team(s) will be removed, not just " +
+                  "the row(s) you selected."
+                : "";
+
             var confirm = MessageBox.Show(this,
-                $"{(add ? "Assign" : "Remove")} {roles.Count} role(s) {(add ? "to" : "from")} {teams.Count} team(s)?",
+                $"{(add ? "Assign" : "Remove")} {roles.Count} role(s) {(add ? "to" : "from")} {teams.Count} team(s)?" + warning,
                 "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
             if (confirm != DialogResult.Yes) return;
 
@@ -148,7 +173,7 @@ namespace BuMatrixSecurityRoleAssigner
                 {
                     var service = new TeamRoleAssignmentService(Service);
                     args.Result = service.AssignOrRemove(
-                        teams, roles, _allRoles, add,
+                        teams, roles, _allRoles, add, removeFromAllBus,
                         progress: message => SetWorkingMessage(message));
                 },
                 PostWorkCallBack = args =>
