@@ -1,3 +1,4 @@
+using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
@@ -58,15 +59,19 @@ namespace BuMatrixSecurityRoleAssigner
 
             // ---- ToolStrip ----
             this.tsbLoad.Text = "Load / Refresh";
-            this.tsbLoad.DisplayStyle = ToolStripItemDisplayStyle.Text;
+            this.tsbLoad.Image = CreateRefreshIcon();
+            this.tsbLoad.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
             this.tsbLoad.Click += new System.EventHandler(this.tsbLoad_Click);
 
             // Mode toggle: off = Teams (default), on = Users. Switching swaps the target list's
             // contents and columns - the two modes are never mixed in one Add/Remove call.
+            // Right-aligned to separate it from the Load/Remove-all-BUs cluster on the left.
             this.tsbUsersMode.Text = "Mode: Teams";
-            this.tsbUsersMode.DisplayStyle = ToolStripItemDisplayStyle.Text;
+            this.tsbUsersMode.Image = CreateTeamsIcon();
+            this.tsbUsersMode.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
             this.tsbUsersMode.CheckOnClick = true;
             this.tsbUsersMode.Checked = false;
+            this.tsbUsersMode.Alignment = ToolStripItemAlignment.Right;
             this.tsbUsersMode.ToolTipText = "Toggle between assigning roles to Teams or to Users.";
             this.tsbUsersMode.CheckedChanged += new System.EventHandler(this.tsbUsersMode_CheckedChanged);
 
@@ -218,6 +223,81 @@ namespace BuMatrixSecurityRoleAssigner
                     g.DrawLine(pen, 5.5f, 10f, 14.5f, 10f);
                     if (plus)
                         g.DrawLine(pen, 10f, 5.5f, 10f, 14.5f);
+                }
+            }
+            return bmp;
+        }
+
+        // Toolbar-sized (16x16) circular arrow, matching the Add/Remove badge style.
+        internal static Image CreateRefreshIcon()
+        {
+            var bmp = new Bitmap(16, 16);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var brush = new SolidBrush(Color.FromArgb(0, 110, 190)))
+                    g.FillEllipse(brush, 0, 0, 16, 16);
+
+                var rect = new RectangleF(3.5f, 3.5f, 9, 9);
+                using (var pen = new Pen(Color.White, 1.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                    g.DrawArc(pen, rect, -40, 260);
+
+                // Arrowhead at the trailing end of the arc (-40 + 260 = 220 degrees).
+                const double endAngle = 220 * Math.PI / 180;
+                var cx = rect.X + rect.Width / 2;
+                var cy = rect.Y + rect.Height / 2;
+                var tipX = cx + rect.Width / 2 * Math.Cos(endAngle);
+                var tipY = cy + rect.Height / 2 * Math.Sin(endAngle);
+                var tip = new PointF((float)tipX, (float)tipY);
+                var p1 = new PointF((float)(tipX - 2.6), (float)(tipY - 0.5));
+                var p2 = new PointF((float)(tipX + 1.0), (float)(tipY - 2.3));
+                using (var whiteBrush = new SolidBrush(Color.White))
+                    g.FillPolygon(whiteBrush, new[] { p1, p2, tip });
+            }
+            return bmp;
+        }
+
+        // Two-person "group" glyph for Teams mode.
+        internal static Image CreateTeamsIcon()
+        {
+            var bmp = new Bitmap(16, 16);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var brush = new SolidBrush(Color.FromArgb(0, 150, 130)))
+                    g.FillEllipse(brush, 0, 0, 16, 16);
+
+                using (var white = new SolidBrush(Color.White))
+                {
+                    g.FillEllipse(white, 3.5f, 3.5f, 4, 4);
+                    g.FillEllipse(white, 8.5f, 3.5f, 4, 4);
+                    g.FillPie(white, 2.0f, 7.5f, 7, 7, 180, 180);
+                    g.FillPie(white, 7.0f, 7.5f, 7, 7, 180, 180);
+                }
+            }
+            return bmp;
+        }
+
+        // Single-person glyph for Users mode.
+        internal static Image CreateUserIcon()
+        {
+            var bmp = new Bitmap(16, 16);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var brush = new SolidBrush(Color.FromArgb(120, 80, 170)))
+                    g.FillEllipse(brush, 0, 0, 16, 16);
+
+                using (var white = new SolidBrush(Color.White))
+                {
+                    g.FillEllipse(white, 5.5f, 3.0f, 5, 5);
+                    g.FillPie(white, 3.0f, 8.0f, 10, 9, 180, 180);
                 }
             }
             return bmp;

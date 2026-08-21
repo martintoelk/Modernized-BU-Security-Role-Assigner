@@ -46,6 +46,7 @@ namespace BuMatrixSecurityRoleAssigner
         private void tsbUsersMode_CheckedChanged(object sender, EventArgs e)
         {
             tsbUsersMode.Text = UsersMode ? "Mode: Users" : "Mode: Teams";
+            tsbUsersMode.Image = UsersMode ? CreateUserIcon() : CreateTeamsIcon();
             lblTeams.Text = UsersMode ? "Users (multi-select)" : "Teams (multi-select)";
 
             lvTeams.Columns[0].Text = UsersMode ? "User" : "Team";
