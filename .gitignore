@@ -10,3 +10,6 @@ runs/
 # Wizard-captured secrets (NuGet API key, etc.) - never commit
 .env
 nupkg/
+
+# One-off submission-setup wizards - task's done (#6 closed), not needed going forward
+scripts/
