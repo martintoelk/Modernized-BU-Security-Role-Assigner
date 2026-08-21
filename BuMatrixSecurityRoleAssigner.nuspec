@@ -15,8 +15,11 @@
          own hosted iconUrl (e.g. https://api.nuget.org/.../{version}/icon) once indexed - that's
          the form validators accept. A prior attempt also set a custom <iconUrl> pointing at
          raw.githubusercontent.com; nuget.org used that literal value instead of computing its
-         own, and the XrmToolBox portal validator rejected it as invalid. Don't re-add iconUrl. -->
-    <icon>images\icon.png</icon>
+         own, and the XrmToolBox portal validator rejected it as invalid. Don't re-add iconUrl.
+         Use a forward slash here, not a backslash: a .nupkg is a zip, zip entries always use
+         "/", and the published catalog showed "iconFile": "images\\icon.png" (backslash) not
+         matching the actual "images/icon.png" zip entry - the likely cause of "not valid". -->
+    <icon>images/icon.png</icon>
     <readme>README.md</readme>
     <!-- Tags must start with the literal word "XrmToolBox" - that's how the store's crawler finds it. -->
     <tags>XrmToolBox Plugins BuMatrixSecurityRoleAssigner SecurityRoles BusinessUnits</tags>
@@ -34,11 +37,11 @@
   <files>
     <!-- Plugin DLL must sit under a "Plugins" folder inside the package. Core.dll is a
          dependency of the plugin DLL, so it needs to sit alongside it, not under Plugins. -->
-    <file src="BuMatrixSecurityRoleAssigner\bin\Release\BuMatrixSecurityRoleAssigner.dll" target="lib\net48\Plugins\BuMatrixSecurityRoleAssigner.dll" />
-    <file src="BuMatrixSecurityRoleAssigner\bin\Release\BuMatrixSecurityRoleAssigner.Core.dll" target="lib\net48\Plugins\BuMatrixSecurityRoleAssigner.Core.dll" />
+    <file src="BuMatrixSecurityRoleAssigner\bin\Release\BuMatrixSecurityRoleAssigner.dll" target="lib/net48/Plugins/BuMatrixSecurityRoleAssigner.dll" />
+    <file src="BuMatrixSecurityRoleAssigner\bin\Release\BuMatrixSecurityRoleAssigner.Core.dll" target="lib/net48/Plugins/BuMatrixSecurityRoleAssigner.Core.dll" />
     <file src="README.md" target="README.md" />
     <!-- Package icon (checklist: "Nuget package has an Icon url") - reuses the plugin's own
          tile image (BigImageBase64 in Plugin.cs) rather than requiring external image hosting. -->
-    <file src="nuget\icon.png" target="images\icon.png" />
+    <file src="nuget\icon.png" target="images/icon.png" />
   </files>
 </package>
