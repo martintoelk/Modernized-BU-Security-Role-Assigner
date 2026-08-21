@@ -31,27 +31,15 @@ namespace BuMatrixSecurityRoleAssigner
             ExecuteMethod(LoadData);
         }
 
-        private void btnAdd_Click(object sender, EventArgs e)
-        {
-            if (!RequireConnection()) return;
+        // ExecuteMethod itself prompts the XTB connection dialog when Service is null, so Add/
+        // Remove don't need a manual "connect first" check - that would just replace the host's
+        // own connection UI with a plain message box. If nothing's been loaded yet, the existing
+        // "select at least one..." check in AssignOrRemove covers the empty-list case gracefully.
+        private void btnAdd_Click(object sender, EventArgs e) =>
             ExecuteMethod(() => AssignOrRemove(add: true));
-        }
 
-        private void btnRemove_Click(object sender, EventArgs e)
-        {
-            if (!RequireConnection()) return;
+        private void btnRemove_Click(object sender, EventArgs e) =>
             ExecuteMethod(() => AssignOrRemove(add: false));
-        }
-
-        // Only "Load / Refresh" should prompt the connect dialog. Add/Remove need an existing
-        // connection (and loaded data) and just tell the user to use Load instead of connecting.
-        private bool RequireConnection()
-        {
-            if (Service != null) return true;
-            MessageBox.Show(this, "Connect to an environment and click \"Load / Refresh\" first.",
-                "Not connected", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return false;
-        }
 
         private void txtTeamFilter_TextChanged(object sender, EventArgs e) => PopulateTargetList();
 

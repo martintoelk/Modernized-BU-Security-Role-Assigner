@@ -25,8 +25,11 @@ jobs:
       - name: Restore
         run: dotnet restore
 
+      # -p:Version drives AssemblyVersion/AssemblyFileVersion/InformationalVersion on the built
+      # DLL (overriding the csproj's <Version>) so the shipped plugin DLL's version always
+      # matches the NuGet package version - required by the Tool Library validation checklist.
       - name: Build (Release)
-        run: dotnet build -c Release --no-restore
+        run: dotnet build -c Release --no-restore -p:Version=${{ inputs.version }}
 
       - name: Pack
         run: dotnet pack BuMatrixSecurityRoleAssigner\BuMatrixSecurityRoleAssigner.csproj -c Release --no-build -p:NuspecFile=..\BuMatrixSecurityRoleAssigner.nuspec -p:NuspecProperties="version=${{ inputs.version }}" -o out

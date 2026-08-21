@@ -14,7 +14,10 @@
     <!-- Keep the DLL name clean so it's easy to drop into the XTB Plugins folder -->
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
-    <Version>1.0.1</Version>
+    <!-- Overridden at publish time via -p:Version=<nuget version> (see publish-nuget.yml) so the
+         shipped DLL's version always matches the NuGet package version. Kept here as the
+         default for local/manual builds; bump alongside nuspec pushes if you remember to. -->
+    <Version>1.0.5</Version>
     <Company>Martin Tölk</Company>
     <Product>BU Matrix Security Role Assigner</Product>
   </PropertyGroup>
