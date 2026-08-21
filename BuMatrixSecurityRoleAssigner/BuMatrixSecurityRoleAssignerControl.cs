@@ -31,13 +31,13 @@ namespace BuMatrixSecurityRoleAssigner
             ExecuteMethod(LoadData);
         }
 
-        private void tsbAdd_Click(object sender, EventArgs e)
+        private void btnAdd_Click(object sender, EventArgs e)
         {
             if (!RequireConnection()) return;
             ExecuteMethod(() => AssignOrRemove(add: true));
         }
 
-        private void tsbRemove_Click(object sender, EventArgs e)
+        private void btnRemove_Click(object sender, EventArgs e)
         {
             if (!RequireConnection()) return;
             ExecuteMethod(() => AssignOrRemove(add: false));
@@ -191,7 +191,7 @@ namespace BuMatrixSecurityRoleAssigner
 
             // Classic-BU targets are auto-detected via a behavioral probe in the service, not a
             // manual toggle; a successful fallback is surfaced afterwards via log.ClassicBuDetected.
-            var removeFromAllBus = !add && tsbRemoveAllBus.Checked;
+            var removeFromAllBus = !add && chkRemoveAllBus.Checked;
             var warning = removeFromAllBus
                 ? $"\n\nWARNING: \"Remove from all BUs\" is on - every business-unit copy of each " +
                   $"selected role currently assigned to the selected {targetLabel} will be removed, not " +

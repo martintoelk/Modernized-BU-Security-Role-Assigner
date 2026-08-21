@@ -8,12 +8,11 @@ namespace BuMatrixSecurityRoleAssigner
     {
         private ToolStrip toolStrip;
         private ToolStripButton tsbLoad;
-        private ToolStripButton tsbAdd;
-        private ToolStripButton tsbRemove;
-        private ToolStripButton tsbRemoveAllBus;
         private ToolStripButton tsbUsersMode;
+        private CheckBox chkRemoveAllBus;
+        private ToolStripControlHost tshRemoveAllBus;
 
-        private SplitContainer split;
+        private TableLayoutPanel mainTable;
 
         private Label lblTeams;
         private TextBox txtTeamFilter;
@@ -23,6 +22,11 @@ namespace BuMatrixSecurityRoleAssigner
         private TextBox txtRoleFilter;
         private ListView lvRoles;
 
+        // Middle column between the two grids.
+        private TableLayoutPanel buttonPanel;
+        private Button btnAdd;
+        private Button btnRemove;
+
         private StatusStrip statusStrip;
         private ToolStripStatusLabel lblStatus;
 
@@ -30,12 +34,10 @@ namespace BuMatrixSecurityRoleAssigner
         {
             this.toolStrip = new ToolStrip();
             this.tsbLoad = new ToolStripButton();
-            this.tsbAdd = new ToolStripButton();
-            this.tsbRemove = new ToolStripButton();
-            this.tsbRemoveAllBus = new ToolStripButton();
             this.tsbUsersMode = new ToolStripButton();
+            this.chkRemoveAllBus = new CheckBox();
 
-            this.split = new SplitContainer();
+            this.mainTable = new TableLayoutPanel();
 
             this.lblTeams = new Label();
             this.txtTeamFilter = new TextBox();
@@ -44,6 +46,10 @@ namespace BuMatrixSecurityRoleAssigner
             this.lblRoles = new Label();
             this.txtRoleFilter = new TextBox();
             this.lvRoles = new ListView();
+
+            this.buttonPanel = new TableLayoutPanel();
+            this.btnAdd = new Button();
+            this.btnRemove = new Button();
 
             this.statusStrip = new StatusStrip();
             this.lblStatus = new ToolStripStatusLabel();
@@ -64,48 +70,38 @@ namespace BuMatrixSecurityRoleAssigner
             this.tsbUsersMode.ToolTipText = "Toggle between assigning roles to Teams or to Users.";
             this.tsbUsersMode.CheckedChanged += new System.EventHandler(this.tsbUsersMode_CheckedChanged);
 
-            this.tsbAdd.Text = "Add roles to team(s)";
-            this.tsbAdd.Image = CreateGlyphIcon("+", Color.FromArgb(0, 130, 0));
-            this.tsbAdd.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
-            this.tsbAdd.Alignment = ToolStripItemAlignment.Right;
-            this.tsbAdd.Click += new System.EventHandler(this.tsbAdd_Click);
+            // Remove-only opt-in, shown as a real checkbox (not a toggle button). Off (default):
+            // remove only the exact role row(s) selected, i.e. just that business-unit copy. On:
+            // for each selected role, remove EVERY business-unit copy of that role currently
+            // assigned to the selected team(s)/user(s).
+            this.chkRemoveAllBus.Text = "Remove from all BUs";
+            this.chkRemoveAllBus.AutoSize = true;
+            this.chkRemoveAllBus.Padding = new Padding(4, 0, 4, 0);
 
-            this.tsbRemove.Text = "Remove roles from team(s)";
-            this.tsbRemove.Image = CreateGlyphIcon("-", Color.FromArgb(170, 0, 0));
-            this.tsbRemove.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
-            this.tsbRemove.Alignment = ToolStripItemAlignment.Right;
-            this.tsbRemove.Click += new System.EventHandler(this.tsbRemove_Click);
+            this.tshRemoveAllBus = new ToolStripControlHost(this.chkRemoveAllBus)
+            {
+                ToolTipText =
+                    "Remove only (ignored when adding). Off (default): remove only the exact role row(s) " +
+                    "you selected, i.e. just that business-unit copy.\r\n" +
+                    "On: for each selected role, remove EVERY business-unit copy of that role currently " +
+                    "assigned to the selected team(s)/user(s)."
+            };
 
-            // Classic-BU handling is now auto-detected (behavioral probe in TeamRoleAssignmentService)
-            // rather than a manual toggle - see AssignOrRemove and OperationLog.ClassicBuDetected.
-
-            // Remove-only opt-in toggle. Off (default): remove only the exact role row(s) selected,
-            // i.e. just that business-unit copy. On: for each selected role, remove EVERY
-            // business-unit copy of that role currently assigned to the selected team(s).
-            this.tsbRemoveAllBus.Text = "Remove from all BUs";
-            this.tsbRemoveAllBus.DisplayStyle = ToolStripItemDisplayStyle.Text;
-            this.tsbRemoveAllBus.CheckOnClick = true;
-            this.tsbRemoveAllBus.Checked = false;
-            this.tsbRemoveAllBus.ToolTipText =
-                "Remove only (ignored when adding). Off (default): remove only the exact role row(s) " +
-                "you selected, i.e. just that business-unit copy.\r\n" +
-                "On: for each selected role, remove EVERY business-unit copy of that role currently " +
-                "assigned to the selected team(s).";
-
-            // Add/Remove are right-aligned in add order (Add, then Remove) so they render
-            // left-to-right as "Add roles to team(s)  Remove roles from team(s)" on the right edge.
-            // tsbRemoveAllBus sits left of them, on the left edge with tsbLoad.
             this.toolStrip.Items.AddRange(new ToolStripItem[]
             {
-                this.tsbLoad, this.tsbUsersMode, this.tsbRemoveAllBus, this.tsbAdd, this.tsbRemove
+                this.tsbLoad, this.tsbUsersMode, this.tshRemoveAllBus
             });
             this.toolStrip.Location = new System.Drawing.Point(0, 0);
             this.toolStrip.GripStyle = ToolStripGripStyle.Hidden;
 
-            // ---- SplitContainer (teams | roles) ----
-            this.split.Dock = DockStyle.Fill;
-            this.split.Orientation = Orientation.Vertical;
-            this.split.SplitterWidth = 6;
+            // ---- Main 3-column layout: Roles | Add/Remove buttons | Teams ----
+            this.mainTable.Dock = DockStyle.Fill;
+            this.mainTable.ColumnCount = 3;
+            this.mainTable.RowCount = 1;
+            this.mainTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            this.mainTable.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180f));
+            this.mainTable.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+            this.mainTable.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
             // Left: Roles
             this.lblRoles.Text = "Security roles (multi-select) - Business Unit shown";
@@ -124,10 +120,47 @@ namespace BuMatrixSecurityRoleAssigner
             this.lvRoles.Columns.Add("Security Role", 240);
             this.lvRoles.Columns.Add("Business Unit", 200);
 
-            // NOTE: add order = ListView draws top-most last, so add Fill first, then the Top items.
-            this.split.Panel1.Controls.Add(this.lvRoles);
-            this.split.Panel1.Controls.Add(this.txtRoleFilter);
-            this.split.Panel1.Controls.Add(this.lblRoles);
+            var rolesPanel = new Panel { Dock = DockStyle.Fill };
+            // NOTE: add order = docked controls draw top-most last, so add Fill first, then the Top items.
+            rolesPanel.Controls.Add(this.lvRoles);
+            rolesPanel.Controls.Add(this.txtRoleFilter);
+            rolesPanel.Controls.Add(this.lblRoles);
+            this.mainTable.Controls.Add(rolesPanel, 0, 0);
+
+            // Middle: Add / Remove buttons, vertically centered between the two grids.
+            this.btnAdd.Text = "Add roles to team(s)";
+            this.btnAdd.Image = CreateBadgeIcon(plus: true, Color.FromArgb(0, 140, 0));
+            this.btnAdd.ImageAlign = ContentAlignment.MiddleLeft;
+            this.btnAdd.TextAlign = ContentAlignment.MiddleCenter;
+            this.btnAdd.TextImageRelation = TextImageRelation.ImageBeforeText;
+            this.btnAdd.AutoSize = false;
+            this.btnAdd.Size = new System.Drawing.Size(170, 34);
+            this.btnAdd.Anchor = AnchorStyles.None;
+            this.btnAdd.Click += new System.EventHandler(this.btnAdd_Click);
+
+            this.btnRemove.Text = "Remove roles from team(s)";
+            this.btnRemove.Image = CreateBadgeIcon(plus: false, Color.FromArgb(180, 0, 0));
+            this.btnRemove.ImageAlign = ContentAlignment.MiddleLeft;
+            this.btnRemove.TextAlign = ContentAlignment.MiddleCenter;
+            this.btnRemove.TextImageRelation = TextImageRelation.ImageBeforeText;
+            this.btnRemove.AutoSize = false;
+            this.btnRemove.Size = new System.Drawing.Size(170, 34);
+            this.btnRemove.Anchor = AnchorStyles.None;
+            this.btnRemove.Click += new System.EventHandler(this.btnRemove_Click);
+
+            // Two spacer rows (equal Percent weight) above/below the buttons keep them centered
+            // vertically regardless of the panel's height.
+            this.buttonPanel.Dock = DockStyle.Fill;
+            this.buttonPanel.ColumnCount = 1;
+            this.buttonPanel.RowCount = 4;
+            this.buttonPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            this.buttonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            this.buttonPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            this.buttonPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            this.buttonPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+            this.buttonPanel.Controls.Add(this.btnAdd, 0, 1);
+            this.buttonPanel.Controls.Add(this.btnRemove, 0, 2);
+            this.mainTable.Controls.Add(this.buttonPanel, 1, 0);
 
             // Right: Teams
             this.lblTeams.Text = "Teams (multi-select)";
@@ -147,16 +180,18 @@ namespace BuMatrixSecurityRoleAssigner
             this.lvTeams.Columns.Add("Business Unit", 180);
             this.lvTeams.Columns.Add("Type", 130);
 
-            this.split.Panel2.Controls.Add(this.lvTeams);
-            this.split.Panel2.Controls.Add(this.txtTeamFilter);
-            this.split.Panel2.Controls.Add(this.lblTeams);
+            var teamsPanel = new Panel { Dock = DockStyle.Fill };
+            teamsPanel.Controls.Add(this.lvTeams);
+            teamsPanel.Controls.Add(this.txtTeamFilter);
+            teamsPanel.Controls.Add(this.lblTeams);
+            this.mainTable.Controls.Add(teamsPanel, 2, 0);
 
             // ---- StatusStrip ----
             this.lblStatus.Text = "Click \"Load / Refresh\" after connecting to an environment.";
             this.statusStrip.Items.Add(this.lblStatus);
 
             // ---- Control ----
-            this.Controls.Add(this.split);
+            this.Controls.Add(this.mainTable);
             this.Controls.Add(this.statusStrip);
             this.Controls.Add(this.toolStrip);
             this.Name = "BuMatrixSecurityRoleAssignerControl";
@@ -166,19 +201,24 @@ namespace BuMatrixSecurityRoleAssigner
             this.PerformLayout();
         }
 
-        // Small toolbar glyph rendered at runtime, avoiding a shipped image resource.
-        private static Image CreateGlyphIcon(string symbol, Color color)
+        // Small circular +/- badge icon rendered at runtime, avoiding a shipped image resource.
+        private static Image CreateBadgeIcon(bool plus, Color color)
         {
-            var bmp = new Bitmap(16, 16);
+            var bmp = new Bitmap(20, 20);
             using (var g = Graphics.FromImage(bmp))
-            using (var font = new Font("Segoe UI", 11f, FontStyle.Bold))
-            using (var brush = new SolidBrush(color))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
                 g.Clear(Color.Transparent);
-                var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-                g.DrawString(symbol, font, brush, new RectangleF(0, 0, 16, 16), sf);
+
+                using (var brush = new SolidBrush(color))
+                    g.FillEllipse(brush, 1, 1, 18, 18);
+
+                using (var pen = new Pen(Color.White, 2.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                {
+                    g.DrawLine(pen, 5.5f, 10f, 14.5f, 10f);
+                    if (plus)
+                        g.DrawLine(pen, 10f, 5.5f, 10f, 14.5f);
+                }
             }
             return bmp;
         }
