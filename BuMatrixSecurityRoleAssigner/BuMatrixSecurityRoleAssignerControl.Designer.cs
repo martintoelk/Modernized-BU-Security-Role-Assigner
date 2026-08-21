@@ -9,9 +9,13 @@ namespace BuMatrixSecurityRoleAssigner
     {
         private ToolStrip toolStrip;
         private ToolStripButton tsbLoad;
-        private ToolStripButton tsbUsersMode;
         private CheckBox chkRemoveAllBus;
         private ToolStripControlHost tshRemoveAllBus;
+
+        // Hosted above the Teams/Users list (not the main toolbar) so it reads as "which list
+        // is this" rather than a general command.
+        private ToolStrip modeStrip;
+        private ToolStripButton tsbUsersMode;
 
         private TableLayoutPanel mainTable;
 
@@ -35,8 +39,10 @@ namespace BuMatrixSecurityRoleAssigner
         {
             this.toolStrip = new ToolStrip();
             this.tsbLoad = new ToolStripButton();
-            this.tsbUsersMode = new ToolStripButton();
             this.chkRemoveAllBus = new CheckBox();
+
+            this.modeStrip = new ToolStrip();
+            this.tsbUsersMode = new ToolStripButton();
 
             this.mainTable = new TableLayoutPanel();
 
@@ -65,15 +71,19 @@ namespace BuMatrixSecurityRoleAssigner
 
             // Mode toggle: off = Teams (default), on = Users. Switching swaps the target list's
             // contents and columns - the two modes are never mixed in one Add/Remove call.
-            // Right-aligned to separate it from the Load/Remove-all-BUs cluster on the left.
+            // Hosted in its own strip above the Teams/Users list header (not the main toolbar),
+            // so it reads as "which list is this" rather than a general command.
             this.tsbUsersMode.Text = "Mode: Teams";
             this.tsbUsersMode.Image = CreateTeamsIcon();
             this.tsbUsersMode.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
             this.tsbUsersMode.CheckOnClick = true;
             this.tsbUsersMode.Checked = false;
-            this.tsbUsersMode.Alignment = ToolStripItemAlignment.Right;
             this.tsbUsersMode.ToolTipText = "Toggle between assigning roles to Teams or to Users.";
             this.tsbUsersMode.CheckedChanged += new System.EventHandler(this.tsbUsersMode_CheckedChanged);
+
+            this.modeStrip.Items.Add(this.tsbUsersMode);
+            this.modeStrip.Dock = DockStyle.Top;
+            this.modeStrip.GripStyle = ToolStripGripStyle.Hidden;
 
             // Remove-only opt-in, shown as a real checkbox (not a toggle button). Off (default):
             // remove only the exact role row(s) selected, i.e. just that business-unit copy. On:
@@ -94,7 +104,7 @@ namespace BuMatrixSecurityRoleAssigner
 
             this.toolStrip.Items.AddRange(new ToolStripItem[]
             {
-                this.tsbLoad, this.tsbUsersMode, this.tshRemoveAllBus
+                this.tsbLoad, this.tshRemoveAllBus
             });
             this.toolStrip.Location = new System.Drawing.Point(0, 0);
             this.toolStrip.GripStyle = ToolStripGripStyle.Hidden;
@@ -189,6 +199,8 @@ namespace BuMatrixSecurityRoleAssigner
             teamsPanel.Controls.Add(this.lvTeams);
             teamsPanel.Controls.Add(this.txtTeamFilter);
             teamsPanel.Controls.Add(this.lblTeams);
+            // Added last so it docks above lblTeams (later Top-docked additions render outward).
+            teamsPanel.Controls.Add(this.modeStrip);
             this.mainTable.Controls.Add(teamsPanel, 2, 0);
 
             // ---- StatusStrip ----
