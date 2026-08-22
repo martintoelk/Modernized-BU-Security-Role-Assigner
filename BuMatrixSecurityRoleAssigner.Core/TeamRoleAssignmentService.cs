@@ -138,7 +138,13 @@ namespace BuMatrixSecurityRoleAssigner.Core
             }
             while (ec.MoreRecords);
 
-            return list;
+            // The query only orders by name server-side; business unit is a lookup, so ordering
+            // by its attribute would sort by the underlying id rather than the displayed BU name.
+            // Sort client-side instead, so every BU copy of a role sorts consistently by BU name.
+            return list
+                .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(r => r.BusinessUnitName, StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         /// <summary>

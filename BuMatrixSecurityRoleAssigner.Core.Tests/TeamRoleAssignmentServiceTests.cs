@@ -69,6 +69,27 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         }
 
         [Fact]
+        public void RetrieveRoles_SortsByNameThenBusinessUnit()
+        {
+            // Seeded out of order on both axes: role name descending, and within the
+            // "Salesperson" name, business unit name descending too - RetrieveRoles must sort
+            // by name first, then business unit, regardless of seed/insertion order.
+            var fake = new FakeOrganizationService();
+            fake.SeedRole(Guid.NewGuid(), "Sales Manager", RootBuId, "Zebra BU");
+            var salespersonZebra = fake.SeedRole(Guid.NewGuid(), "Salesperson", RootBuId, "Zebra BU");
+            var salespersonAlpha = fake.SeedRole(Guid.NewGuid(), "Salesperson", RootBuId, "Alpha BU");
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var roles = sut.RetrieveRoles();
+
+            Assert.Equal(
+                new[] { "Sales Manager", "Salesperson", "Salesperson" },
+                roles.Select(r => r.Name).ToArray());
+            var salespersonRoles = roles.Where(r => r.Name == "Salesperson").ToArray();
+            Assert.Equal(new[] { salespersonAlpha.Id, salespersonZebra.Id }, salespersonRoles.Select(r => r.Id).ToArray());
+        }
+
+        [Fact]
         public void AssignOrRemove_Add_AssignsExactRoleAndBu_AndSkipsAlreadyAssigned()
         {
             var fake = new FakeOrganizationService();
