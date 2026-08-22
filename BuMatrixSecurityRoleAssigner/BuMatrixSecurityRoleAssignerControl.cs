@@ -93,7 +93,7 @@ namespace BuMatrixSecurityRoleAssigner
                     _allUsers = result.Item2;
                     _allRoles = result.Item3;
                     _modernizedBuStatus = result.Item4;
-                    lblModernizedBuStatus.Text = $"Modernized BUs: {result.Item4}";
+                    UpdateBuModeIndicator();
                     PopulateTargetList();
                     PopulateRoleList();
                 }
@@ -140,6 +140,28 @@ namespace BuMatrixSecurityRoleAssigner
 
             lvTeams.EndUpdate();
             UpdateStatus();
+        }
+
+        // Drives the read-only mode indicator above the roles grid (mirrors the Teams/Users
+        // toggle above the other grid) - never a user setting, just a readout of the probe result.
+        private void UpdateBuModeIndicator()
+        {
+            lblBuModeIndicator.Image?.Dispose();
+            switch (_modernizedBuStatus)
+            {
+                case ModernizedBuStatus.Yes:
+                    lblBuModeIndicator.Text = "Mode: Modernized BU";
+                    lblBuModeIndicator.Image = CreateModernizedBuIcon();
+                    break;
+                case ModernizedBuStatus.No:
+                    lblBuModeIndicator.Text = "Mode: Classic BU";
+                    lblBuModeIndicator.Image = CreateClassicBuIcon();
+                    break;
+                default:
+                    lblBuModeIndicator.Text = "Mode: Unknown";
+                    lblBuModeIndicator.Image = CreateUnknownBuIcon();
+                    break;
+            }
         }
 
         // Classic-BU orgs (status No) typically carry a redundant copy of every role in every BU;

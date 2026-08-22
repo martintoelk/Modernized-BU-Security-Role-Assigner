@@ -18,6 +18,12 @@ namespace BuMatrixSecurityRoleAssigner
         private ToolStrip modeStrip;
         private ToolStripButton tsbUsersMode;
 
+        // Mirrors modeStrip above the Roles list, so both grid headers sit at the same height
+        // instead of the roles side floating higher once the mode strip appears on the other
+        // side. Read-only (no toggle - the BU mode is auto-detected, not user-chosen).
+        private ToolStrip modeStripRoles;
+        private ToolStripLabel lblBuModeIndicator;
+
         private TableLayoutPanel mainTable;
 
         private Label lblTeams;
@@ -35,7 +41,6 @@ namespace BuMatrixSecurityRoleAssigner
 
         private StatusStrip statusStrip;
         private ToolStripStatusLabel lblStatus;
-        private ToolStripStatusLabel lblModernizedBuStatus;
 
         private void InitializeComponent()
         {
@@ -45,6 +50,9 @@ namespace BuMatrixSecurityRoleAssigner
 
             this.modeStrip = new ToolStrip();
             this.tsbUsersMode = new ToolStripButton();
+
+            this.modeStripRoles = new ToolStrip();
+            this.lblBuModeIndicator = new ToolStripLabel();
 
             this.mainTable = new TableLayoutPanel();
 
@@ -62,7 +70,6 @@ namespace BuMatrixSecurityRoleAssigner
 
             this.statusStrip = new StatusStrip();
             this.lblStatus = new ToolStripStatusLabel();
-            this.lblModernizedBuStatus = new ToolStripStatusLabel();
 
             this.SuspendLayout();
 
@@ -87,6 +94,21 @@ namespace BuMatrixSecurityRoleAssigner
             this.modeStrip.Items.Add(this.tsbUsersMode);
             this.modeStrip.Dock = DockStyle.Top;
             this.modeStrip.GripStyle = ToolStripGripStyle.Hidden;
+
+            // Read-only counterpart on the Roles side: shows whether the connected org is running
+            // Modernized BUs or Classic BUs (auto-detected via a behavioral probe, see
+            // GetModernizedBuStatus - never a manual toggle). Its only job here is to occupy the
+            // same strip height as modeStrip so lblRoles and lblTeams line up.
+            this.lblBuModeIndicator.Text = "Mode: Unknown";
+            this.lblBuModeIndicator.Image = CreateUnknownBuIcon();
+            this.lblBuModeIndicator.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
+            this.lblBuModeIndicator.ToolTipText =
+                "Whether the connected environment uses Modernized (matrix) business units or Classic " +
+                "business units. Auto-detected on Load / Refresh - not a manual setting.";
+
+            this.modeStripRoles.Items.Add(this.lblBuModeIndicator);
+            this.modeStripRoles.Dock = DockStyle.Top;
+            this.modeStripRoles.GripStyle = ToolStripGripStyle.Hidden;
 
             // Remove-only opt-in, shown as a real checkbox (not a toggle button). Off (default):
             // remove only the exact role row(s) selected, i.e. just that business-unit copy. On:
@@ -145,6 +167,8 @@ namespace BuMatrixSecurityRoleAssigner
             rolesPanel.Controls.Add(this.lvRoles);
             rolesPanel.Controls.Add(roleFilterBox);
             rolesPanel.Controls.Add(this.lblRoles);
+            // Added last so it docks above lblRoles, mirroring modeStrip above lblTeams.
+            rolesPanel.Controls.Add(this.modeStripRoles);
             this.mainTable.Controls.Add(rolesPanel, 0, 0);
 
             // Middle: Add / Remove buttons, vertically centered between the two grids.
@@ -213,10 +237,6 @@ namespace BuMatrixSecurityRoleAssigner
             // ---- StatusStrip ----
             this.lblStatus.Text = "Click \"Load / Refresh\" after connecting to an environment.";
             this.statusStrip.Items.Add(this.lblStatus);
-            this.lblModernizedBuStatus.Text = "Modernized BUs: Unknown";
-            this.lblModernizedBuStatus.Spring = true;
-            this.lblModernizedBuStatus.TextAlign = ContentAlignment.MiddleRight;
-            this.statusStrip.Items.Add(this.lblModernizedBuStatus);
 
             // ---- Control ----
             this.Controls.Add(this.mainTable);
@@ -375,6 +395,84 @@ namespace BuMatrixSecurityRoleAssigner
                     g.FillEllipse(white, 8.5f, 3.5f, 4, 4);
                     g.FillPie(white, 2.0f, 7.5f, 7, 7, 180, 180);
                     g.FillPie(white, 7.0f, 7.5f, 7, 7, 180, 180);
+                }
+            }
+            return bmp;
+        }
+
+        // 2x2 grid glyph for "Modernized BUs" (matrix data-access model).
+        internal static Image CreateModernizedBuIcon()
+        {
+            var bmp = new Bitmap(16, 16);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var brush = new SolidBrush(Color.FromArgb(0, 110, 190)))
+                    g.FillEllipse(brush, 0, 0, 16, 16);
+
+                using (var white = new SolidBrush(Color.White))
+                {
+                    g.FillRectangle(white, 3.5f, 3.5f, 3.6f, 3.6f);
+                    g.FillRectangle(white, 8.9f, 3.5f, 3.6f, 3.6f);
+                    g.FillRectangle(white, 3.5f, 8.9f, 3.6f, 3.6f);
+                    g.FillRectangle(white, 8.9f, 8.9f, 3.6f, 3.6f);
+                }
+            }
+            return bmp;
+        }
+
+        // Small hierarchy/tree glyph for "Classic BUs" (single-BU-ownership model).
+        internal static Image CreateClassicBuIcon()
+        {
+            var bmp = new Bitmap(16, 16);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var brush = new SolidBrush(Color.FromArgb(170, 110, 0)))
+                    g.FillEllipse(brush, 0, 0, 16, 16);
+
+                using (var pen = new Pen(Color.White, 1.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                {
+                    g.DrawLine(pen, 8f, 4.5f, 8f, 8f);
+                    g.DrawLine(pen, 4.5f, 8f, 11.5f, 8f);
+                    g.DrawLine(pen, 4.5f, 8f, 4.5f, 11f);
+                    g.DrawLine(pen, 11.5f, 8f, 11.5f, 11f);
+                }
+                using (var white = new SolidBrush(Color.White))
+                {
+                    g.FillEllipse(white, 6.4f, 2.6f, 3.2f, 3.2f);
+                    g.FillEllipse(white, 2.9f, 9.4f, 3.2f, 3.2f);
+                    g.FillEllipse(white, 9.9f, 9.4f, 3.2f, 3.2f);
+                }
+            }
+            return bmp;
+        }
+
+        // Greyed-out "?" glyph shown before Load / Refresh has run its BU-mode probe.
+        internal static Image CreateUnknownBuIcon()
+        {
+            var bmp = new Bitmap(16, 16);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var brush = new SolidBrush(Color.FromArgb(150, 150, 150)))
+                    g.FillEllipse(brush, 0, 0, 16, 16);
+
+                using (var white = new SolidBrush(Color.White))
+                using (var font = new Font("Segoe UI", 8.5f, System.Drawing.FontStyle.Bold))
+                {
+                    var format = new StringFormat
+                    {
+                        Alignment = StringAlignment.Center,
+                        LineAlignment = StringAlignment.Center
+                    };
+                    g.DrawString("?", font, white, new RectangleF(0, -0.5f, 16, 16), format);
                 }
             }
             return bmp;
