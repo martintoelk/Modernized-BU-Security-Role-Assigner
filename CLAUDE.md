@@ -1,7 +1,7 @@
 # Modernized BU Role Assigner — XrmToolBox plugin
 
 Handover context for Claude Code CLI. This file is the canonical project brief; read it
-before touching code. Repo root on the author's machine: `D:\repos\Modernized BU Role Assigner`.
+before touching code.
 
 ## What this is
 

@@ -2,7 +2,7 @@
 
 Research note for a possible future feature: BuMatrixSecurityRoleAssigner handing off
 context (a selected team/user/BU) to "User Team Role Inspector with Matrix BU"
-(source: `D:\repos\User Team Role Inspector with Matrix BU`), or vice versa.
+(source: sibling repo `../User Team Role Inspector with Matrix BU`), or vice versa.
 
 ## Direct answer
 
@@ -206,7 +206,7 @@ etc.), the message-bus route is a clean, low-risk fit:
    ```
    Note: `"User/Team Role Inspector"` must exactly match the target's
    `ExportMetadata("Name", ...)` in `UserTeamRoleInspector\Plugin.cs`
-   (`D:\repos\User Team Role Inspector with Matrix BU\UserTeamRoleInspector\Plugin.cs:9`),
+   (sibling repo `../User Team Role Inspector with Matrix BU/UserTeamRoleInspector/Plugin.cs:9`),
    which is currently `"User/Team Role Inspector"`.
 4. In `UserTeamRoleInspectorControl`, implement `OnIncomingMessage` to accept a
    `RoleAssignerHandoff`-shaped payload (via reflection/duck-typing on the `dynamic`, since
@@ -237,10 +237,10 @@ JSON file for the user to paste/open in the other tool.
 - [MscrmTools/XrmToolBox Issue #1385 — "Way to implement nested controls?"](https://github.com/MscrmTools/XrmToolBox/issues/1385) —
   checked, confirmed **not** relevant to inter-tool opening (covers nested `UserControl`s
   within a single plugin only)
-- Local: `D:\repos\Modernized BU Security Role Assigner\BuMatrixSecurityRoleAssigner\Plugin.cs`
+- Local: `BuMatrixSecurityRoleAssigner/Plugin.cs`
   (line 9, `ExportMetadata("Name", "BU Matrix Security Role Assigner")`)
-- Local: `D:\repos\Modernized BU Security Role Assigner\BuMatrixSecurityRoleAssigner\BuMatrixSecurityRoleAssignerControl.cs`
+- Local: `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssignerControl.cs`
   (confirms current control derives from `PluginControlBase` only — no messaging interface
   implemented yet)
-- Local: `D:\repos\User Team Role Inspector with Matrix BU\UserTeamRoleInspector\Plugin.cs`
+- Local: sibling repo `../User Team Role Inspector with Matrix BU/UserTeamRoleInspector/Plugin.cs`
   (line 9, `ExportMetadata("Name", "User/Team Role Inspector")`)
