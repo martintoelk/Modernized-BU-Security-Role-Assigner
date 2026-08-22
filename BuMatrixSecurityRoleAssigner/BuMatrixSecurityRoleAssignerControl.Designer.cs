@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace BuMatrixSecurityRoleAssigner
@@ -126,8 +127,10 @@ namespace BuMatrixSecurityRoleAssigner
             this.lblRoles.Height = 20;
             this.lblRoles.Padding = new Padding(2, 3, 0, 0);
 
-            this.txtRoleFilter.Dock = DockStyle.Top;
+            this.txtRoleFilter.Dock = DockStyle.Fill;
+            this.txtRoleFilter.BorderStyle = BorderStyle.None;
             this.txtRoleFilter.TextChanged += new System.EventHandler(this.txtRoleFilter_TextChanged);
+            var roleFilterBox = CreateSearchBox(this.txtRoleFilter);
 
             this.lvRoles.Dock = DockStyle.Fill;
             this.lvRoles.View = View.Details;
@@ -140,7 +143,7 @@ namespace BuMatrixSecurityRoleAssigner
             var rolesPanel = new Panel { Dock = DockStyle.Fill };
             // NOTE: add order = docked controls draw top-most last, so add Fill first, then the Top items.
             rolesPanel.Controls.Add(this.lvRoles);
-            rolesPanel.Controls.Add(this.txtRoleFilter);
+            rolesPanel.Controls.Add(roleFilterBox);
             rolesPanel.Controls.Add(this.lblRoles);
             this.mainTable.Controls.Add(rolesPanel, 0, 0);
 
@@ -185,8 +188,10 @@ namespace BuMatrixSecurityRoleAssigner
             this.lblTeams.Height = 20;
             this.lblTeams.Padding = new Padding(2, 3, 0, 0);
 
-            this.txtTeamFilter.Dock = DockStyle.Top;
+            this.txtTeamFilter.Dock = DockStyle.Fill;
+            this.txtTeamFilter.BorderStyle = BorderStyle.None;
             this.txtTeamFilter.TextChanged += new System.EventHandler(this.txtTeamFilter_TextChanged);
+            var teamFilterBox = CreateSearchBox(this.txtTeamFilter);
 
             this.lvTeams.Dock = DockStyle.Fill;
             this.lvTeams.View = View.Details;
@@ -199,7 +204,7 @@ namespace BuMatrixSecurityRoleAssigner
 
             var teamsPanel = new Panel { Dock = DockStyle.Fill };
             teamsPanel.Controls.Add(this.lvTeams);
-            teamsPanel.Controls.Add(this.txtTeamFilter);
+            teamsPanel.Controls.Add(teamFilterBox);
             teamsPanel.Controls.Add(this.lblTeams);
             // Added last so it docks above lblTeams (later Top-docked additions render outward).
             teamsPanel.Controls.Add(this.modeStrip);
@@ -224,6 +229,62 @@ namespace BuMatrixSecurityRoleAssigner
             this.PerformLayout();
         }
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, string lParam);
+
+        private const int EM_SETCUEBANNER = 0x1501;
+
+        // Native "cue banner" placeholder text - shown only while the box is empty and unfocused,
+        // and never interferes with the actual Text value used by the filter logic. Deferred to
+        // HandleCreated (rather than sent immediately) so it doesn't force premature Win32 handle
+        // creation on a still-unparented control, and so it's reapplied if the handle is ever
+        // recreated (e.g. by host theming).
+        private static void SetCueBanner(TextBox textBox, string text) =>
+            textBox.HandleCreated += (s, e) => SendMessage(textBox.Handle, EM_SETCUEBANNER, IntPtr.Zero, text);
+
+        // Wraps a filter TextBox with a magnifying-glass icon and a bordered frame so it reads as
+        // a search box rather than a plain, purpose-unclear textbox. The caller must already have
+        // set the TextBox's Dock to Fill and BorderStyle to None.
+        private static Panel CreateSearchBox(TextBox textBox)
+        {
+            var icon = new PictureBox
+            {
+                Image = CreateSearchIcon(),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Dock = DockStyle.Left,
+                Cursor = Cursors.IBeam,
+                BackColor = SystemColors.Window,
+            };
+            // Clicking the icon should focus the box, same as clicking the box itself.
+            icon.Click += (s, e) => textBox.Focus();
+
+            var container = new Panel
+            {
+                Dock = DockStyle.Top,
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = SystemColors.Window,
+            };
+            // Add order = docked controls draw top-most last, so add Fill first, then Left.
+            container.Controls.Add(textBox);
+            container.Controls.Add(icon);
+
+            // TextBox.Font is ambient (falls back to Control.DefaultFont until the control is
+            // actually parented into a tree with a real Font, e.g. once the XTB host themes the
+            // plugin), so size off FontChanged rather than computing PreferredHeight once here -
+            // that would freeze in the wrong height if the host's font differs from the default.
+            void SyncToFont(object s, EventArgs e)
+            {
+                container.Height = textBox.PreferredHeight + 2;
+                icon.Width = container.Height;
+            }
+            textBox.FontChanged += SyncToFont;
+            SyncToFont(null, EventArgs.Empty);
+
+            SetCueBanner(textBox, "Search...");
+
+            return container;
+        }
+
         // Small circular +/- badge icon rendered at runtime, avoiding a shipped image resource.
         private static Image CreateBadgeIcon(bool plus, Color color)
         {
@@ -241,6 +302,25 @@ namespace BuMatrixSecurityRoleAssigner
                     g.DrawLine(pen, 5.5f, 10f, 14.5f, 10f);
                     if (plus)
                         g.DrawLine(pen, 10f, 5.5f, 10f, 14.5f);
+                }
+            }
+            return bmp;
+        }
+
+        // Monochrome magnifying glass for the search-box icon; deliberately uncolored so it reads
+        // as an inline glyph inside a white textbox rather than a toolbar badge.
+        internal static Image CreateSearchIcon()
+        {
+            var bmp = new Bitmap(14, 14);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var pen = new Pen(Color.FromArgb(120, 120, 120), 1.6f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                {
+                    g.DrawEllipse(pen, 1f, 1f, 7.5f, 7.5f);
+                    g.DrawLine(pen, 8.0f, 8.0f, 12.5f, 12.5f);
                 }
             }
             return bmp;
