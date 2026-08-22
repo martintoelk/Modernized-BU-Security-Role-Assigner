@@ -236,9 +236,10 @@ namespace BuMatrixSecurityRoleAssigner
                 {
                     var stopwatch = Stopwatch.StartNew();
                     var service = new TeamRoleAssignmentService(Service);
+                    var targetNoun = UsersMode ? "User" : "Team";
                     args.Result = service.AssignOrRemove(
                         targets, roles, _allRoles, add, removeFromAllBus,
-                        progress: p => SetWorkingMessage(FormatProgressMessage(p, add, stopwatch.Elapsed)));
+                        progress: p => SetWorkingMessage(FormatProgressMessage(p, add, stopwatch.Elapsed, roles.Count, targetNoun)));
                 },
                 PostWorkCallBack = args =>
                 {
@@ -259,29 +260,30 @@ namespace BuMatrixSecurityRoleAssigner
         }
 
         // Turns the raw (targetsDone/total) progress the service reports into a message with
-        // percent-complete and an ETA, so large batches show more than just a spinner. ETA is
+        // overall progress and an ETA, so large batches show more than just a spinner. ETA is
         // derived from throughput-so-far (elapsed / targetsDone) rather than a fixed estimate,
         // since per-target work (role count, retries) varies. No estimate is shown until at
         // least one target has finished, since a rate from zero completions is meaningless.
-        private static string FormatProgressMessage(AssignRemoveProgress p, bool add, TimeSpan elapsed)
+        private static string FormatProgressMessage(AssignRemoveProgress p, bool add, TimeSpan elapsed, int roleCount, string targetNoun)
         {
             var verb = add ? "Assigning" : "Removing";
+            var prep = add ? "to" : "from";
             var percent = p.Total > 0 ? p.TargetsDone * 100 / p.Total : 0;
-            var header = $"{verb} roles... {p.TargetsDone}/{p.Total} ({percent}%) - {p.CurrentTargetName}";
+            var targetNounLower = targetNoun.ToLowerInvariant();
+            var header = $"{verb} {roleCount} {Pluralize("Role", roleCount)} {prep} {p.Total} {Pluralize(targetNoun, p.Total)}. " +
+                         $"Current progress: {p.TargetsDone} of {p.Total} {Pluralize(targetNounLower, p.Total)} processed ({percent}%)";
 
             if (p.TargetsDone == 0)
                 return header;
 
             var remaining = p.Total - p.TargetsDone;
             var estimate = TimeSpan.FromTicks(elapsed.Ticks / p.TargetsDone * remaining);
-            return $"{header} - ETA {FormatEta(estimate)}";
+            return $"{header} ETA: {FormatEta(estimate)}";
         }
 
+        private static string Pluralize(string noun, int count) => count == 1 ? noun : noun + "s";
+
         private static string FormatEta(TimeSpan eta) =>
-            eta.TotalHours >= 1
-                ? $"{(int)eta.TotalHours}h {eta.Minutes}m"
-                : eta.TotalMinutes >= 1
-                    ? $"{(int)eta.TotalMinutes}m {eta.Seconds}s"
-                    : $"{eta.Seconds}s";
+            $"{(int)eta.TotalHours:00}:{eta.Minutes:00}:{eta.Seconds:00}";
     }
 }
