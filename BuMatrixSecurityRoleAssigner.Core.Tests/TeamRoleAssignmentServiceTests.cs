@@ -14,14 +14,29 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         {
             var fake = new FakeOrganizationService();
             fake.SeedTeam(Guid.NewGuid(), "Sales Team", RootBuId, "Root BU", "Owner");
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var teams = sut.RetrieveTeams();
+
+            var teamItem = Assert.Single(teams);
+            Assert.Equal("Sales Team", teamItem.Name);
+            Assert.Equal("Owner", teamItem.TeamType);
+        }
+
+        [Fact]
+        public void RetrieveTeams_ExcludesAccessTeams()
+        {
+            // Access teams can't hold security roles, so they shouldn't be offered as selectable
+            // targets in the first place - see CLAUDE.md architecture notes.
+            var fake = new FakeOrganizationService();
+            fake.SeedTeam(Guid.NewGuid(), "Sales Team", RootBuId, "Root BU", "Owner");
             fake.SeedTeam(Guid.NewGuid(), "Support Access Team", RootBuId, "Root BU", "Access");
             var sut = new TeamRoleAssignmentService(fake);
 
             var teams = sut.RetrieveTeams();
 
-            Assert.Equal(2, teams.Count);
-            Assert.Contains(teams, t => t.Name == "Sales Team" && t.TeamType == "Owner");
-            Assert.Contains(teams, t => t.Name == "Support Access Team" && t.TeamType == "Access");
+            Assert.Single(teams);
+            Assert.DoesNotContain(teams, t => t.Name == "Support Access Team");
         }
 
         [Fact]
@@ -178,6 +193,12 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         [Fact]
         public void AssignOrRemove_Add_AccessTeamFault_IsCapturedPerTeam_NotFatal()
         {
+            // RetrieveTeams now filters access teams out at the query level (see
+            // RetrieveTeams_ExcludesAccessTeams), so an access team can no longer reach
+            // AssignOrRemove via the normal UI flow. This test still exercises the fallback
+            // catch-and-report path directly - kept as a safety net for any other target type
+            // that legitimately can't hold a role - by constructing the TeamItem by hand instead
+            // of going through RetrieveTeams.
             var fake = new FakeOrganizationService();
             var accessTeam = fake.SeedTeam(Guid.NewGuid(), "Support Access Team", RootBuId, "Root BU", "Access");
             var ownerTeam = fake.SeedTeam(Guid.NewGuid(), "Sales Team", RootBuId, "Root BU", "Owner");
@@ -185,7 +206,11 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             fake.FaultPredicate = (entityName, entityId, relationship, related) => entityId == accessTeam.Id;
             var sut = new TeamRoleAssignmentService(fake);
 
-            var teams = sut.RetrieveTeams();
+            var teams = new[]
+            {
+                new TeamItem { Id = accessTeam.Id, Name = "Support Access Team", BusinessUnitId = RootBuId, BusinessUnitName = "Root BU", TeamType = "Access" },
+                new TeamItem { Id = ownerTeam.Id, Name = "Sales Team", BusinessUnitId = RootBuId, BusinessUnitName = "Root BU", TeamType = "Owner" },
+            };
             var roles = sut.RetrieveRoles();
 
             var log = sut.AssignOrRemove(teams, roles, roles, add: true);

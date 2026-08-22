@@ -9,7 +9,7 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
     /// <summary>
     /// Hand-rolled in-memory IOrganizationService double. Supports just enough of the SDK
     /// surface that TeamRoleAssignmentService exercises: RetrieveMultiple over a single base
-    /// entity with an optional single-level LinkEntity join and Equal-only criteria, paging via
+    /// entity with an optional single-level LinkEntity join and Equal/NotEqual-only criteria, paging via
     /// PageInfo.Count/PageNumber, and Associate/Disassociate against N:N relationships backed by
     /// a synthetic intersect-entity table (mirroring how Dataverse itself stores teamroles /
     /// systemuserroles).
@@ -54,6 +54,10 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             var team = new Entity("team", id) { ["name"] = name };
             if (businessUnitId != Guid.Empty)
                 team["businessunitid"] = new EntityReference("businessunit", businessUnitId) { Name = businessUnitName };
+            // team_type option set values, per the generated entity: Owner = 0, Access = 1,
+            // Security Group = 2, Office Group = 3.
+            var teamTypeCode = teamType == "Access" ? 1 : teamType == "Security Group" ? 2 : teamType == "Office Group" ? 3 : 0;
+            team["teamtype"] = new OptionSetValue(teamTypeCode);
             team.FormattedValues["teamtype"] = teamType;
             return Seed(team);
         }
@@ -275,14 +279,24 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
 
         private static bool MatchesCondition(Entity entity, ConditionExpression condition)
         {
-            if (condition.Operator != ConditionOperator.Equal || condition.Values.Count != 1)
+            if (condition.Values.Count != 1 ||
+                (condition.Operator != ConditionOperator.Equal && condition.Operator != ConditionOperator.NotEqual))
                 return true; // unsupported operators are permissive - out of scope for this fake
 
+            bool equal;
             if (condition.Values[0] is Guid expectedGuid)
-                return GetGuidValue(entity, condition.AttributeName) == expectedGuid;
+            {
+                equal = GetGuidValue(entity, condition.AttributeName) == expectedGuid;
+            }
+            else
+            {
+                var actual = entity.GetAttributeValue<object>(condition.AttributeName);
+                if (actual is OptionSetValue optionSetValue)
+                    actual = optionSetValue.Value;
+                equal = Equals(actual, condition.Values[0]);
+            }
 
-            var actual = entity.GetAttributeValue<object>(condition.AttributeName);
-            return Equals(actual, condition.Values[0]);
+            return condition.Operator == ConditionOperator.Equal ? equal : !equal;
         }
     }
 }
