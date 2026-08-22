@@ -14,6 +14,11 @@ namespace BuMatrixSecurityRoleAssigner
         private List<UserItem> _allUsers = new List<UserItem>();
         private List<RoleItem> _allRoles = new List<RoleItem>();
 
+        // Informational per GetModernizedBuStatus's doc comment, but also drives whether the roles
+        // list collapses BU-duplicate rows (see PopulateRoleList) - classic-BU orgs otherwise show a
+        // confusing one-row-per-BU-copy list for what is really one logical role.
+        private ModernizedBuStatus _modernizedBuStatus = ModernizedBuStatus.Unknown;
+
         // Teams vs Users - never mixed. tsbUsersMode.Checked is the single source of truth; this
         // just makes call sites read as "which mode", not "which checkbox".
         private bool UsersMode => tsbUsersMode.Checked;
@@ -86,6 +91,7 @@ namespace BuMatrixSecurityRoleAssigner
                     _allTeams = result.Item1;
                     _allUsers = result.Item2;
                     _allRoles = result.Item3;
+                    _modernizedBuStatus = result.Item4;
                     lblModernizedBuStatus.Text = $"Modernized BUs: {result.Item4}";
                     PopulateTargetList();
                     PopulateRoleList();
@@ -135,15 +141,40 @@ namespace BuMatrixSecurityRoleAssigner
             UpdateStatus();
         }
 
+        // Classic-BU orgs (status No) typically carry a redundant copy of every role in every BU;
+        // showing one row per copy is noisy and the per-row BU doesn't mean anything the way it
+        // does for modernized BUs. Collapse to one row per logical role (RootRoleId) instead, and
+        // hide the BU column. Yes/Unknown keep today's per-BU-row display unchanged (fail open -
+        // never collapse on a failed probe).
+        private bool CollapseRolesByRootRole => _modernizedBuStatus == ModernizedBuStatus.No;
+
+        // Tracks the collapse state the BU column width was last set for, so PopulateRoleList only
+        // touches the width on an actual collapse/expand transition - not on every repopulation
+        // (e.g. each filter keystroke), which would otherwise clobber a manual column resize.
+        private bool? _buColumnWidthSetForCollapse;
+
         private void PopulateRoleList()
         {
             var filter = txtRoleFilter.Text?.Trim();
+            var collapse = CollapseRolesByRootRole;
+            if (_buColumnWidthSetForCollapse != collapse)
+            {
+                lvRoles.Columns[1].Width = collapse ? 0 : 200;
+                _buColumnWidthSetForCollapse = collapse;
+            }
+
+            IEnumerable<RoleItem> roles = collapse
+                ? _allRoles.GroupBy(r => r.RootRoleId)
+                           .Select(g => g.FirstOrDefault(r => r.Id == g.Key) ?? g.First())
+                           .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+                : _allRoles;
+
             lvRoles.BeginUpdate();
             lvRoles.Items.Clear();
-            foreach (var r in _allRoles.Where(r => Match(filter, r.Name, r.BusinessUnitName)))
+            foreach (var r in roles.Where(r => Match(filter, r.Name, collapse ? null : r.BusinessUnitName)))
             {
                 var item = new ListViewItem(r.Name);
-                item.SubItems.Add(r.BusinessUnitName);
+                item.SubItems.Add(collapse ? "" : r.BusinessUnitName);
                 item.Tag = r;
                 lvRoles.Items.Add(item);
             }
@@ -155,8 +186,11 @@ namespace BuMatrixSecurityRoleAssigner
         {
             var targetLabel = UsersMode ? "Users" : "Teams";
             var targetTotal = UsersMode ? _allUsers.Count : _allTeams.Count;
+            var roleTotal = CollapseRolesByRootRole
+                ? _allRoles.Select(r => r.RootRoleId).Distinct().Count()
+                : _allRoles.Count;
             lblStatus.Text = $"{targetLabel}: {lvTeams.Items.Count} shown ({targetTotal} total)   |   " +
-                             $"Roles: {lvRoles.Items.Count} shown ({_allRoles.Count} total)";
+                             $"Roles: {lvRoles.Items.Count} shown ({roleTotal} total)";
         }
 
         private List<IAssignmentTarget> GetSelectedTargets() =>
