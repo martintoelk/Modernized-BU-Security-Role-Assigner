@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -74,6 +75,29 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             var teamRoles = sut.GetTeamRoleIds(team.Id);
             Assert.Contains(newRole.Id, teamRoles);
             Assert.Contains(alreadyAssignedRole.Id, teamRoles);
+        }
+
+        [Fact]
+        public void AssignOrRemove_ReportsProgress_OncePerTarget_WithZeroBasedDoneCount()
+        {
+            var fake = new FakeOrganizationService();
+            var teamA = fake.SeedTeam(Guid.NewGuid(), "Team A", RootBuId, "Root BU", "Owner");
+            var teamB = fake.SeedTeam(Guid.NewGuid(), "Team B", RootBuId, "Root BU", "Owner");
+            var role = fake.SeedRole(Guid.NewGuid(), "Salesperson", RootBuId, "Root BU");
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var teams = sut.RetrieveTeams().OrderBy(t => t.Name).ToList();
+            var roles = sut.RetrieveRoles();
+            var reported = new List<AssignRemoveProgress>();
+
+            sut.AssignOrRemove(teams, roles, roles, add: true, progress: p => reported.Add(p));
+
+            Assert.Equal(2, reported.Count);
+            Assert.Equal(0, reported[0].TargetsDone);
+            Assert.Equal(2, reported[0].Total);
+            Assert.Equal("Team A", reported[0].CurrentTargetName);
+            Assert.Equal(1, reported[1].TargetsDone);
+            Assert.Equal("Team B", reported[1].CurrentTargetName);
         }
 
         [Fact]

@@ -242,7 +242,7 @@ namespace BuMatrixSecurityRoleAssigner.Core
             IReadOnlyList<RoleItem> allRoles,
             bool add,
             bool removeFromAllBus = false,
-            Action<string> progress = null)
+            Action<AssignRemoveProgress> progress = null)
         {
             if (targets == null) throw new ArgumentNullException(nameof(targets));
             if (selectedRoles == null) throw new ArgumentNullException(nameof(selectedRoles));
@@ -262,8 +262,8 @@ namespace BuMatrixSecurityRoleAssigner.Core
 
             foreach (var target in targets)
             {
+                progress?.Invoke(new AssignRemoveProgress(n, targets.Count, target.Name));
                 n++;
-                progress?.Invoke($"Processing {n}/{targets.Count}: {target.Name}");
 
                 if (add && target is UserItem { IsDisabled: true })
                     log.DisabledUserWarnings.Add(target.Name);

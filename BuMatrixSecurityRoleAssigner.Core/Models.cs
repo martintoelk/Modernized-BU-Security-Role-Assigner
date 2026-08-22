@@ -83,6 +83,30 @@ namespace BuMatrixSecurityRoleAssigner.Core
         Yes
     }
 
+    /// <summary>
+    /// Reported by <see cref="TeamRoleAssignmentService.AssignOrRemove"/> as each target finishes,
+    /// so the caller (background thread) can show overall progress and estimate time remaining
+    /// without this layer knowing anything about wall-clock time or UI - it just reports counts.
+    /// </summary>
+    public readonly struct AssignRemoveProgress
+    {
+        public AssignRemoveProgress(int targetsDone, int total, string currentTargetName)
+        {
+            TargetsDone = targetsDone;
+            Total = total;
+            CurrentTargetName = currentTargetName;
+        }
+
+        /// <summary>Number of targets fully processed before the current one (0-based progress).</summary>
+        public int TargetsDone { get; }
+
+        /// <summary>Total number of targets in this run.</summary>
+        public int Total { get; }
+
+        /// <summary>Name of the target now being processed (the (TargetsDone + 1)th of Total).</summary>
+        public string CurrentTargetName { get; }
+    }
+
     /// <summary>Collects what happened during an add/remove run so we can show a summary.</summary>
     public class OperationLog
     {

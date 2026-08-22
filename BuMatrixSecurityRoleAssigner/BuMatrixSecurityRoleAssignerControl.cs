@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Windows.Forms;
 using BuMatrixSecurityRoleAssigner.Core;
@@ -233,10 +234,11 @@ namespace BuMatrixSecurityRoleAssigner
                 Message = add ? "Assigning roles..." : "Removing roles...",
                 Work = (worker, args) =>
                 {
+                    var stopwatch = Stopwatch.StartNew();
                     var service = new TeamRoleAssignmentService(Service);
                     args.Result = service.AssignOrRemove(
                         targets, roles, _allRoles, add, removeFromAllBus,
-                        progress: message => SetWorkingMessage(message));
+                        progress: p => SetWorkingMessage(FormatProgressMessage(p, add, stopwatch.Elapsed)));
                 },
                 PostWorkCallBack = args =>
                 {
@@ -255,5 +257,31 @@ namespace BuMatrixSecurityRoleAssigner
                 }
             });
         }
+
+        // Turns the raw (targetsDone/total) progress the service reports into a message with
+        // percent-complete and an ETA, so large batches show more than just a spinner. ETA is
+        // derived from throughput-so-far (elapsed / targetsDone) rather than a fixed estimate,
+        // since per-target work (role count, retries) varies. No estimate is shown until at
+        // least one target has finished, since a rate from zero completions is meaningless.
+        private static string FormatProgressMessage(AssignRemoveProgress p, bool add, TimeSpan elapsed)
+        {
+            var verb = add ? "Assigning" : "Removing";
+            var percent = p.Total > 0 ? p.TargetsDone * 100 / p.Total : 0;
+            var header = $"{verb} roles... {p.TargetsDone}/{p.Total} ({percent}%) - {p.CurrentTargetName}";
+
+            if (p.TargetsDone == 0)
+                return header;
+
+            var remaining = p.Total - p.TargetsDone;
+            var estimate = TimeSpan.FromTicks(elapsed.Ticks / p.TargetsDone * remaining);
+            return $"{header} - ETA {FormatEta(estimate)}";
+        }
+
+        private static string FormatEta(TimeSpan eta) =>
+            eta.TotalHours >= 1
+                ? $"{(int)eta.TotalHours}h {eta.Minutes}m"
+                : eta.TotalMinutes >= 1
+                    ? $"{(int)eta.TotalMinutes}m {eta.Seconds}s"
+                    : $"{eta.Seconds}s";
     }
 }
