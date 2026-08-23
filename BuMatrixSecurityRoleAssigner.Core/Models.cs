@@ -84,26 +84,59 @@ namespace BuMatrixSecurityRoleAssigner.Core
     }
 
     /// <summary>
-    /// Reported by <see cref="TeamRoleAssignmentService.AssignOrRemove"/> as each target finishes,
-    /// so the caller (background thread) can show overall progress and estimate time remaining
+    /// Reported by <see cref="TeamRoleAssignmentService.AssignOrRemove"/> as a run proceeds, so
+    /// the caller (background thread) can show overall progress and estimate time remaining
     /// without this layer knowing anything about wall-clock time or UI - it just reports counts.
+    /// <para>
+    /// Progress is counted in <em>role units</em> - one per (target, role) pair the run will
+    /// attempt, after the "remove from all BUs" widening - rather than in targets. Counting
+    /// targets makes the bar jump in whole-target steps: 3 teams x 40 roles would only ever read
+    /// 0%, 33%, 66%, and no ETA at all until the first team finished. Role units move the bar
+    /// (and the ETA derived from it) inside a target too.
+    /// </para>
+    /// <para>
+    /// Within a target, reports are throttled to roughly one per
+    /// <see cref="TeamRoleAssignmentService.RoleBatchSize"/> units. Every target boundary reports
+    /// regardless, so a run of one role across many targets still moves; the opening report is at
+    /// 0 and the closing one always lands on <see cref="TotalUnits"/>, so a caller showing a
+    /// percentage both starts at 0% and finishes at 100%.
+    /// </para>
     /// </summary>
     public readonly struct AssignRemoveProgress
     {
-        public AssignRemoveProgress(int targetsDone, int total, string currentTargetName)
+        public AssignRemoveProgress(int unitsDone, int totalUnits, int targetsDone, int totalTargets, string currentTargetName)
         {
+            UnitsDone = unitsDone;
+            TotalUnits = totalUnits;
             TargetsDone = targetsDone;
-            Total = total;
+            TotalTargets = totalTargets;
             CurrentTargetName = currentTargetName;
         }
 
-        /// <summary>Number of targets fully processed before the current one (0-based progress).</summary>
+        /// <summary>
+        /// Role units settled so far - (dis)associated, or skipped because they were already in
+        /// the wanted state. Skips count too, so this always ends on <see cref="TotalUnits"/>.
+        /// </summary>
+        public int UnitsDone { get; }
+
+        /// <summary>Total role units this run will settle: targets x (widened) selected roles.</summary>
+        public int TotalUnits { get; }
+
+        /// <summary>
+        /// Number of targets fully processed before the current one (0-based progress) - so the
+        /// target being worked on is the (TargetsDone + 1)th. The one exception is the closing
+        /// report, which fires after the last target finished and therefore carries
+        /// TargetsDone == <see cref="TotalTargets"/>; clamp before rendering "target N of M".
+        /// </summary>
         public int TargetsDone { get; }
 
         /// <summary>Total number of targets in this run.</summary>
-        public int Total { get; }
+        public int TotalTargets { get; }
 
-        /// <summary>Name of the target now being processed (the (TargetsDone + 1)th of Total).</summary>
+        /// <summary>
+        /// Name of the target now being processed (the (TargetsDone + 1)th of TotalTargets); on
+        /// the closing report, the last target of the run.
+        /// </summary>
         public string CurrentTargetName { get; }
     }
 

@@ -72,6 +72,13 @@ the package version. Smoke-tested against a live dev org — successful.
   per target and surfaced in the summary without aborting the batch.
 - **Paging** on all loads (`PagingInfo`, 5000/page + paging cookie) so it won't truncate large
   orgs at 5k.
+- **Progress in role units.** `AssignOrRemove` denominates progress in (target × role) units, not
+  targets, and (dis)associates in batches of `RoleBatchSize` (10) — so the percentage and the ETA
+  move *inside* a target instead of only at target boundaries (3 teams × 40 roles would otherwise
+  only ever read 0/33/66%). Within a target, reports are throttled to roughly one per batch; every
+  target boundary reports regardless, so a run of one role across many targets still moves. Skipped
+  units count too, so it always finishes at 100%. Classic-BU warnings and per-target errors are
+  aggregated to one line per target, so batching doesn't multiply the summary.
 - **Threading** via `PluginControlBase.WorkAsync`; selections are read on the UI thread before
   the background work; progress via `SetWorkingMessage`. Add/Remove call `ExecuteMethod` directly
   (no manual connection check) so the host's own connection dialog opens when disconnected.

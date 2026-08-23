@@ -41,6 +41,16 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         /// </summary>
         public Func<QueryExpression, bool> RetrieveMultipleFaultPredicate { get; set; }
 
+        /// <summary>
+        /// Size of every Associate batch the service issued, in call order - including batches
+        /// that <see cref="FaultPredicate"/> then faulted, since the round trip still happened.
+        /// Lets a test assert how the service chunks a large role selection.
+        /// </summary>
+        public List<int> AssociateBatchSizes { get; } = new List<int>();
+
+        /// <summary>Disassociate equivalent of <see cref="AssociateBatchSizes"/>.</summary>
+        public List<int> DisassociateBatchSizes { get; } = new List<int>();
+
         public Entity Seed(Entity entity)
         {
             if (entity.Id == Guid.Empty)
@@ -130,6 +140,7 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
 
         public void Associate(string entityName, Guid entityId, Relationship relationship, EntityReferenceCollection relatedEntities)
         {
+            AssociateBatchSizes.Add(relatedEntities.Count);
             if (FaultPredicate != null && FaultPredicate(entityName, entityId, relationship, relatedEntities))
                 throw new InvalidOperationException(
                     $"Cannot associate: {entityName} {entityId} does not support the '{relationship.SchemaName}' relationship (simulated fault).");
@@ -152,6 +163,7 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
 
         public void Disassociate(string entityName, Guid entityId, Relationship relationship, EntityReferenceCollection relatedEntities)
         {
+            DisassociateBatchSizes.Add(relatedEntities.Count);
             if (FaultPredicate != null && FaultPredicate(entityName, entityId, relationship, relatedEntities))
                 throw new InvalidOperationException(
                     $"Cannot disassociate: {entityName} {entityId} does not support the '{relationship.SchemaName}' relationship (simulated fault).");

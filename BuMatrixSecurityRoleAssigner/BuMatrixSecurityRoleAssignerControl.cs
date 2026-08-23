@@ -261,7 +261,7 @@ namespace BuMatrixSecurityRoleAssigner
                     var targetNoun = UsersMode ? "User" : "Team";
                     args.Result = service.AssignOrRemove(
                         targets, roles, _allRoles, add, removeFromAllBus,
-                        progress: p => SetWorkingMessage(FormatProgressMessage(p, add, stopwatch.Elapsed, roles.Count, targetNoun)));
+                        progress: p => SetWorkingMessage(FormatProgressMessage(p, add, stopwatch.Elapsed, targetNoun)));
                 },
                 PostWorkCallBack = args =>
                 {
@@ -281,25 +281,36 @@ namespace BuMatrixSecurityRoleAssigner
             });
         }
 
-        // Turns the raw (targetsDone/total) progress the service reports into a message with
-        // overall progress and an ETA, so large batches show more than just a spinner. ETA is
-        // derived from throughput-so-far (elapsed / targetsDone) rather than a fixed estimate,
-        // since per-target work (role count, retries) varies. No estimate is shown until at
-        // least one target has finished, since a rate from zero completions is meaningless.
-        private static string FormatProgressMessage(AssignRemoveProgress p, bool add, TimeSpan elapsed, int roleCount, string targetNoun)
+        // Turns the role-unit progress the service reports into a message with overall progress
+        // and an ETA, so large batches show more than just a spinner. Units are (target x role)
+        // pairs rather than targets: with 3 teams x 40 roles a target-denominated bar would only
+        // ever read 0/33/66% and show no ETA at all until the first team finished. ETA is derived
+        // from throughput-so-far (elapsed / unitsDone) rather than a fixed estimate, since
+        // per-unit work (retries, skips) varies. No estimate is shown until at least one unit has
+        // settled, since a rate from zero completions is meaningless.
+        private static string FormatProgressMessage(AssignRemoveProgress p, bool add, TimeSpan elapsed, string targetNoun)
         {
             var verb = add ? "Assigning" : "Removing";
             var prep = add ? "to" : "from";
-            var percent = p.Total > 0 ? p.TargetsDone * 100 / p.Total : 0;
+            var percent = p.TotalUnits > 0 ? p.UnitsDone * 100 / p.TotalUnits : 0;
+            // Roles per target, taken from the unit total rather than the raw selection count, so
+            // both halves of the message agree: with "Remove from all BUs" on, one selected row
+            // widens to every BU copy, and "1 Role ... 0 of 15 role assignments" would just look
+            // wrong.
+            var roleCount = p.TotalTargets > 0 ? p.TotalUnits / p.TotalTargets : 0;
             var targetNounLower = targetNoun.ToLowerInvariant();
-            var header = $"{verb} {roleCount} {Pluralize("Role", roleCount)} {prep} {p.Total} {Pluralize(targetNoun, p.Total)}. " +
-                         $"Current progress: {p.TargetsDone} of {p.Total} {Pluralize(targetNounLower, p.Total)} processed ({percent}%)";
+            // The closing report arrives with every target counted, so clamp rather than showing
+            // "team 4 of 3".
+            var currentTargetNumber = Math.Min(p.TargetsDone + 1, p.TotalTargets);
+            var header = $"{verb} {roleCount} {Pluralize("Role", roleCount)} {prep} {p.TotalTargets} {Pluralize(targetNoun, p.TotalTargets)}. " +
+                         $"Current progress: {p.UnitsDone} of {p.TotalUnits} role {Pluralize("assignment", p.TotalUnits)} ({percent}%), " +
+                         $"{targetNounLower} {currentTargetNumber} of {p.TotalTargets}";
 
-            if (p.TargetsDone == 0)
+            if (p.UnitsDone == 0)
                 return header;
 
-            var remaining = p.Total - p.TargetsDone;
-            var estimate = TimeSpan.FromTicks(elapsed.Ticks / p.TargetsDone * remaining);
+            var remaining = p.TotalUnits - p.UnitsDone;
+            var estimate = TimeSpan.FromTicks(elapsed.Ticks / p.UnitsDone * remaining);
             return $"{header} ETA: {FormatEta(estimate)}";
         }
 

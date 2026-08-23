@@ -17,6 +17,16 @@ namespace BuMatrixSecurityRoleAssigner.Core
     /// </summary>
     public class TeamRoleAssignmentService
     {
+        /// <summary>
+        /// How many roles go into one Associate/Disassociate call, and so also how often progress
+        /// is reported within a single target (target boundaries always report). Chunking the
+        /// platform call is what lets progress move inside a target instead of only at target
+        /// boundaries; 10 is small enough that a long run feels alive, and large enough that the
+        /// extra round trips stay a rounding error next to the per-role work the platform does
+        /// anyway.
+        /// </summary>
+        public const int RoleBatchSize = 10;
+
         private readonly IOrganizationService _service;
 
         public TeamRoleAssignmentService(IOrganizationService service)
@@ -247,6 +257,11 @@ namespace BuMatrixSecurityRoleAssigner.Core
         /// currently assigned to the team is removed, not just the row picked in the list - a wider
         /// blast radius, so the caller should confirm first.
         /// </para>
+        /// <para>
+        /// <paramref name="progress"/> is reported in role units - see
+        /// <see cref="AssignRemoveProgress"/> - and is throttled to roughly one report per
+        /// <see cref="RoleBatchSize"/> units.
+        /// </para>
         /// </summary>
         public OperationLog AssignOrRemove(
             IReadOnlyList<IAssignmentTarget> targets,
@@ -270,13 +285,33 @@ namespace BuMatrixSecurityRoleAssigner.Core
                 : null;
 
             var log = new OperationLog();
-            var n = 0;
 
-            foreach (var target in targets)
+            // Modernized default: assign/remove exactly what the user picked, whatever its BU -
+            // unless removeFromAllBus widens each selection to every BU copy of that logical role.
+            // Neither the selection nor the widening depends on the target, so this is computed
+            // once and every target works through the same rows.
+            var rolesPerTarget = WidenSelection(selectedRoles, byRootAll);
+
+            // Progress is counted in role units - see AssignRemoveProgress for why targets alone
+            // make too coarse a denominator.
+            var totalUnits = rolesPerTarget.Count * targets.Count;
+            var unitsDone = 0;
+            var targetsDone = 0;
+            var lastReportedUnits = -RoleBatchSize;  // so the opening report always fires
+            var currentTargetName = string.Empty;
+
+            void Report(bool force = false)
             {
-                progress?.Invoke(new AssignRemoveProgress(n, targets.Count, target.Name));
-                n++;
+                if (progress == null)
+                    return;
+                if (!force && unitsDone - lastReportedUnits < RoleBatchSize)
+                    return;
+                lastReportedUnits = unitsDone;
+                progress(new AssignRemoveProgress(unitsDone, totalUnits, targetsDone, targets.Count, currentTargetName));
+            }
 
+            void ProcessTarget(IAssignmentTarget target)
+            {
                 if (add && target is UserItem { IsDisabled: true })
                     log.DisabledUserWarnings.Add(target.Name);
 
@@ -288,138 +323,253 @@ namespace BuMatrixSecurityRoleAssigner.Core
                 catch (Exception ex)
                 {
                     log.Errors.Add($"{target.Name}: could not read existing roles ({ex.Message})");
-                    continue;
+                    return;
                 }
 
-                // Modernized default: assign/remove exactly what the user picked, whatever its BU -
-                // unless removeFromAllBus widens each selection to every BU copy of that logical role.
                 var roleTargets = new List<RoleItem>();
-                var queuedIds = new HashSet<Guid>();
-                foreach (var role in selectedRoles)
+                foreach (var row in rolesPerTarget)
                 {
-                    var rows = removeFromAllBus && byRootAll.TryGetValue(role.RootRoleId, out var copies)
-                        ? copies
-                        : new List<RoleItem> { role };
-
-                    foreach (var row in rows)
+                    if (add)
                     {
-                        // Two selected rows can widen to the same target (e.g. two BU copies of the
-                        // same role both selected) - skip dupes so we don't queue it twice.
-                        if (!queuedIds.Add(row.Id))
-                            continue;
-
-                        if (add)
-                        {
-                            if (existing.Contains(row.Id))
-                                log.AlreadyPresent.Add($"{target.Name} <- {row.Name}");
-                            else
-                                roleTargets.Add(row);
-                        }
+                        if (existing.Contains(row.Id))
+                            log.AlreadyPresent.Add($"{target.Name} <- {row.Name}");
                         else
-                        {
-                            if (!existing.Contains(row.Id))
-                                log.NotPresent.Add($"{target.Name} <- {row.Name}");
-                            else
-                                roleTargets.Add(row);
-                        }
+                            roleTargets.Add(row);
+                    }
+                    else
+                    {
+                        if (!existing.Contains(row.Id))
+                            log.NotPresent.Add($"{target.Name} <- {row.Name}");
+                        else
+                            roleTargets.Add(row);
                     }
                 }
 
-                if (roleTargets.Count == 0)
-                    continue;
+                // Rows already in the wanted state need no platform call, but they're still work
+                // this run accounted for - credit them or the bar stalls short of the total.
+                unitsDone += rolesPerTarget.Count - roleTargets.Count;
+
+                // One classic-BU warning and one error line per target, not per batch: the summary
+                // counts targets ("detected for N team(s)"), and a target that can't hold roles at
+                // all fails every one of its batches with the same message.
+                var classicBuResolved = 0;
+                var targetErrors = new List<string>();
+
+                foreach (var batch in InBatches(roleTargets, RoleBatchSize))
+                {
+                    classicBuResolved += ApplyRoleBatch(target, batch, add, existing, byRootBu, log, targetErrors);
+                    unitsDone += batch.Count;
+                    Report();
+                }
+
+                if (classicBuResolved > 0)
+                    log.ClassicBuDetected.Add(
+                        $"{target.Name} ({target.BusinessUnitName}): matched {classicBuResolved} role(s) to the target's own business unit.");
+
+                foreach (var message in targetErrors)
+                    log.Errors.Add($"{target.Name}: {message}");
+            }
+
+            foreach (var target in targets)
+            {
+                currentTargetName = target.Name;
+                var unitsBeforeTarget = unitsDone;
+                // A target boundary always reports, throttle or not. Throttling these too would
+                // starve any run whose targets are worth fewer than RoleBatchSize units each -
+                // 9 teams x 1 role would sit at 0% with no ETA from start to finish, which is
+                // worse than the per-target reporting this replaced.
+                Report(force: true);
+
+                ProcessTarget(target);
+
+                // Whatever ProcessTarget managed to do - including bailing out early - the target's
+                // units are all settled once it returns.
+                unitsDone = unitsBeforeTarget + rolesPerTarget.Count;
+                targetsDone++;
+            }
+
+            Report(force: true);
+            return log;
+        }
+
+        /// <summary>
+        /// The distinct role rows each target will be worked through: the selection exactly as
+        /// picked, or - when "remove from all BUs" is on (<paramref name="byRootAll"/> non-null) -
+        /// every BU copy sharing each selection's root role. Deduped, because two selected rows can
+        /// widen onto the same copy (e.g. two BU copies of one logical role both selected).
+        /// </summary>
+        private static List<RoleItem> WidenSelection(
+            IReadOnlyList<RoleItem> selectedRoles,
+            Dictionary<Guid, List<RoleItem>> byRootAll)
+        {
+            var widened = new List<RoleItem>();
+            var seen = new HashSet<Guid>();
+            foreach (var role in selectedRoles)
+            {
+                var rows = byRootAll != null && byRootAll.TryGetValue(role.RootRoleId, out var copies)
+                    ? (IReadOnlyList<RoleItem>)copies
+                    : new[] { role };
+
+                foreach (var row in rows)
+                {
+                    if (seen.Add(row.Id))
+                        widened.Add(row);
+                }
+            }
+            return widened;
+        }
+
+        /// <summary>Splits a list into consecutive batches of at most <paramref name="size"/> items.</summary>
+        private static IEnumerable<List<T>> InBatches<T>(IReadOnlyList<T> items, int size)
+        {
+            for (var start = 0; start < items.Count; start += size)
+            {
+                var batch = new List<T>(Math.Min(size, items.Count - start));
+                for (var i = start; i < start + size && i < items.Count; i++)
+                    batch.Add(items[i]);
+                yield return batch;
+            }
+        }
+
+        /// <summary>
+        /// (Dis)associates one batch of roles for one target, with the classic-BU probe/retry
+        /// around it. Returns how many roles the same-BU fallback resolved - 0 when the batch went
+        /// through exactly as selected, which is the modernized-BU case. Error messages are
+        /// appended to <paramref name="targetErrors"/> (deduped) for the caller to report once per
+        /// target rather than once per batch.
+        /// </summary>
+        private int ApplyRoleBatch(
+            IAssignmentTarget target,
+            List<RoleItem> batch,
+            bool add,
+            HashSet<Guid> existing,
+            Dictionary<Guid, Dictionary<Guid, RoleItem>> byRootBu,
+            OperationLog log,
+            List<string> targetErrors)
+        {
+            void AddError(string message)
+            {
+                if (!targetErrors.Contains(message))
+                    targetErrors.Add(message);
+            }
+
+            try
+            {
+                AssociateOrDisassociate(target, batch.Select(r => r.ToRef()), add);
+                log.Changed += batch.Count;
+                MarkApplied(existing, batch, add);
+                return 0;
+            }
+            catch (Exception)
+            {
+                // Probe result: either a genuine per-target fault (e.g. Access teams can't hold
+                // security roles, or an anti-elevation check on user role assignment) or a
+                // classic-BU mismatch. Retry resolving each faulted role to this target's own BU
+                // copy; a successful retry confirms classic-BU behavior. Roles split three ways:
+                //  - resolved: a distinct BU copy exists and isn't already in the state we
+                //    want (add: not yet assigned; remove: currently assigned) - worth retrying.
+                //  - noBuCopy: no copy of this logical role exists in this target's BU at all -
+                //    a genuine "nothing to fall back to", reported as NoRoleInBu.
+                //  - sameBu: the "closest" copy IS the one we already tried (target is already in
+                //    that role's BU) - the fault isn't a BU mismatch, so it's a real error
+                //    (e.g. Access team, or an anti-elevation rejection), not a BU-copy gap.
+                // The BU-copy's own id (not the originally-selected role's id) is what's checked
+                // against `existing` here - it's the actual row that would be (dis)associated,
+                // and may already be in the wanted state from a prior run (idempotency).
+                var resolved = new List<RoleItem>();
+                var resolvedIds = new HashSet<Guid>();
+                var noBuCopy = new List<RoleItem>();
+                var sameBu = new List<RoleItem>();
+                foreach (var role in batch)
+                {
+                    if (!byRootBu.TryGetValue(role.RootRoleId, out var buMap) ||
+                        !buMap.TryGetValue(target.BusinessUnitId, out var buCopy))
+                    {
+                        noBuCopy.Add(role);
+                        continue;
+                    }
+
+                    if (buCopy.Id == role.Id)
+                    {
+                        sameBu.Add(role);
+                        continue;
+                    }
+
+                    // Two selected BU copies of one logical role resolve onto the same same-BU
+                    // copy - queue it once, or the retry would (dis)associate a duplicate row and
+                    // fault on it.
+                    if (!resolvedIds.Add(buCopy.Id))
+                        continue;
+
+                    if (add)
+                    {
+                        if (existing.Contains(buCopy.Id))
+                            log.AlreadyPresent.Add($"{target.Name} <- {buCopy.Name}");
+                        else
+                            resolved.Add(buCopy);
+                    }
+                    else
+                    {
+                        if (!existing.Contains(buCopy.Id))
+                            log.NotPresent.Add($"{target.Name} <- {buCopy.Name}");
+                        else
+                            resolved.Add(buCopy);
+                    }
+                }
+
+                foreach (var role in noBuCopy)
+                    log.NoRoleInBu.Add($"{target.Name} ({target.BusinessUnitName}) <- {role.Name}");
+
+                // sameBu roles shared the failed batch with roles that may genuinely have needed
+                // BU resolution, so the batch fault doesn't necessarily implicate them - retry
+                // them alone to tell a real per-role error apart from collateral batch failure.
+                if (sameBu.Count > 0)
+                {
+                    try
+                    {
+                        AssociateOrDisassociate(target, sameBu.Select(r => r.ToRef()), add);
+                        log.Changed += sameBu.Count;
+                        MarkApplied(existing, sameBu, add);
+                    }
+                    catch (Exception exSameBu)
+                    {
+                        AddError(exSameBu.Message);
+                    }
+                }
+
+                if (resolved.Count == 0)
+                    return 0;
 
                 try
                 {
-                    AssociateOrDisassociate(target, roleTargets.Select(r => r.ToRef()), add);
-                    log.Changed += roleTargets.Count;
+                    AssociateOrDisassociate(target, resolved.Select(r => r.ToRef()), add);
+                    log.Changed += resolved.Count;
+                    MarkApplied(existing, resolved, add);
+                    return resolved.Count;
                 }
-                catch (Exception)
+                catch (Exception ex2)
                 {
-                    // Probe result: either a genuine per-target fault (e.g. Access teams can't hold
-                    // security roles, or an anti-elevation check on user role assignment) or a
-                    // classic-BU mismatch. Retry resolving each faulted role to this target's own BU
-                    // copy; a successful retry confirms classic-BU behavior. Roles split three ways:
-                    //  - resolved: a distinct BU copy exists and isn't already in the state we
-                    //    want (add: not yet assigned; remove: currently assigned) - worth retrying.
-                    //  - noBuCopy: no copy of this logical role exists in this target's BU at all -
-                    //    a genuine "nothing to fall back to", reported as NoRoleInBu.
-                    //  - sameBu: the "closest" copy IS the one we already tried (target is already in
-                    //    that role's BU) - the fault isn't a BU mismatch, so it's a real error
-                    //    (e.g. Access team, or an anti-elevation rejection), not a BU-copy gap.
-                    // The BU-copy's own id (not the originally-selected role's id) is what's checked
-                    // against `existing` here - it's the actual row that would be (dis)associated,
-                    // and may already be in the wanted state from a prior run (idempotency).
-                    var resolved = new List<RoleItem>();
-                    var noBuCopy = new List<RoleItem>();
-                    var sameBu = new List<RoleItem>();
-                    foreach (var role in roleTargets)
-                    {
-                        if (!byRootBu.TryGetValue(role.RootRoleId, out var buMap) ||
-                            !buMap.TryGetValue(target.BusinessUnitId, out var buCopy))
-                        {
-                            noBuCopy.Add(role);
-                            continue;
-                        }
-
-                        if (buCopy.Id == role.Id)
-                        {
-                            sameBu.Add(role);
-                            continue;
-                        }
-
-                        if (add)
-                        {
-                            if (existing.Contains(buCopy.Id))
-                                log.AlreadyPresent.Add($"{target.Name} <- {buCopy.Name}");
-                            else
-                                resolved.Add(buCopy);
-                        }
-                        else
-                        {
-                            if (!existing.Contains(buCopy.Id))
-                                log.NotPresent.Add($"{target.Name} <- {buCopy.Name}");
-                            else
-                                resolved.Add(buCopy);
-                        }
-                    }
-
-                    foreach (var role in noBuCopy)
-                        log.NoRoleInBu.Add($"{target.Name} ({target.BusinessUnitName}) <- {role.Name}");
-
-                    // sameBu roles shared the failed batch with roles that may genuinely have needed
-                    // BU resolution, so the batch fault doesn't necessarily implicate them - retry
-                    // them alone to tell a real per-role error apart from collateral batch failure.
-                    if (sameBu.Count > 0)
-                    {
-                        try
-                        {
-                            AssociateOrDisassociate(target, sameBu.Select(r => r.ToRef()), add);
-                            log.Changed += sameBu.Count;
-                        }
-                        catch (Exception exSameBu)
-                        {
-                            log.Errors.Add($"{target.Name}: {exSameBu.Message}");
-                        }
-                    }
-
-                    if (resolved.Count == 0)
-                        continue;
-
-                    try
-                    {
-                        AssociateOrDisassociate(target, resolved.Select(r => r.ToRef()), add);
-                        log.Changed += resolved.Count;
-                        log.ClassicBuDetected.Add(
-                            $"{target.Name} ({target.BusinessUnitName}): matched {resolved.Count} role(s) to the target's own business unit.");
-                    }
-                    catch (Exception ex2)
-                    {
-                        log.Errors.Add($"{target.Name}: {ex2.Message}");
-                    }
+                    AddError(ex2.Message);
+                    return 0;
                 }
             }
+        }
 
-            return log;
+        /// <summary>
+        /// Folds a successful (dis)association back into the target's known role set, so a later
+        /// batch for the same target treats it as settled. Matters for the classic-BU fallback:
+        /// two selected BU copies of one logical role resolve onto the same same-BU copy, and
+        /// without this the second batch would re-attempt a row the first already applied.
+        /// </summary>
+        private static void MarkApplied(HashSet<Guid> existing, IEnumerable<RoleItem> roles, bool add)
+        {
+            foreach (var role in roles)
+            {
+                if (add)
+                    existing.Add(role.Id);
+                else
+                    existing.Remove(role.Id);
+            }
         }
 
         private void AssociateOrDisassociate(IAssignmentTarget target, IEnumerable<EntityReference> roleRefs, bool add)
