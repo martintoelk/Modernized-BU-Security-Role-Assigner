@@ -10,7 +10,6 @@ namespace BuMatrixSecurityRoleAssigner
     {
         private ToolStrip toolStrip;
         private ToolStripButton tsbLoad;
-        private ToolStripButton tsbInspect;
         private ToolStripSeparator tssBeforeTeamFilters;
         private CheckBox chkIgnoreAgentTeams;
         private ToolStripControlHost tshIgnoreAgentTeams;
@@ -18,10 +17,13 @@ namespace BuMatrixSecurityRoleAssigner
         private CheckBox chkRemoveAllBus;
         private ToolStripControlHost tshRemoveAllBus;
 
-        // Hosted above the Teams/Users list (not the main toolbar) so it reads as "which list
-        // is this" rather than a general command.
+        // Hosted above the Teams/Users list (not the main toolbar) so everything on it reads as
+        // being about that list - which records it holds, and what to do with the row you picked -
+        // rather than as a general command.
         private ToolStrip modeStrip;
         private ToolStripButton tsbUsersMode;
+        private ToolStripSeparator tssInspect;
+        private ToolStripButton tsbInspect;
 
         // Mirrors modeStrip above the Roles list, so both grid headers sit at the same height
         // instead of the roles side floating higher once the mode strip appears on the other
@@ -51,7 +53,6 @@ namespace BuMatrixSecurityRoleAssigner
         {
             this.toolStrip = new ToolStrip();
             this.tsbLoad = new ToolStripButton();
-            this.tsbInspect = new ToolStripButton();
             this.tssBeforeTeamFilters = new ToolStripSeparator();
             this.chkIgnoreAgentTeams = new CheckBox();
             this.tssBeforeRemoveAllBus = new ToolStripSeparator();
@@ -59,6 +60,8 @@ namespace BuMatrixSecurityRoleAssigner
 
             this.modeStrip = new ToolStrip();
             this.tsbUsersMode = new ToolStripButton();
+            this.tssInspect = new ToolStripSeparator();
+            this.tsbInspect = new ToolStripButton();
 
             this.modeStripRoles = new ToolStrip();
             this.lblBuModeIndicator = new ToolStripLabel();
@@ -88,21 +91,6 @@ namespace BuMatrixSecurityRoleAssigner
             this.tsbLoad.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
             this.tsbLoad.Click += new System.EventHandler(this.tsbLoad_Click);
 
-            // Hands the one selected team/user to "User/Team Role Inspector" over XrmToolBox's
-            // message bus (issue #17). Always enabled, like Add/Remove: the "exactly one row"
-            // rule is checked on click rather than by watching lvTeams.SelectedIndexChanged,
-            // which fires once per row and would turn every repopulation of a large selection
-            // into thousands of handler calls.
-            this.tsbInspect.Text = "Inspect in Role Inspector";
-            this.tsbInspect.Image = CreateInspectIcon();
-            this.tsbInspect.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
-            this.tsbInspect.ToolTipText =
-                "Open the selected team or user in the \"User/Team Role Inspector\" tool, which shows " +
-                "every role it holds - directly and, for a user, via team membership.\r\n" +
-                "Select exactly one row first. XrmToolBox opens the tool if it isn't already open, " +
-                "and reports it if the tool isn't installed.";
-            this.tsbInspect.Click += new System.EventHandler(this.tsbInspect_Click);
-
             // Mode toggle: off = Teams (default), on = Users. Switching swaps the target list's
             // contents and columns - the two modes are never mixed in one Add/Remove call.
             // Hosted in its own strip above the Teams/Users list header (not the main toolbar),
@@ -115,7 +103,26 @@ namespace BuMatrixSecurityRoleAssigner
             this.tsbUsersMode.ToolTipText = "Toggle between assigning roles to Teams or to Users.";
             this.tsbUsersMode.CheckedChanged += new System.EventHandler(this.tsbUsersMode_CheckedChanged);
 
-            this.modeStrip.Items.Add(this.tsbUsersMode);
+            // Hands the one selected team/user to "User/Team Role Inspector" over XrmToolBox's
+            // message bus (issue #17). Lives on this strip rather than the main toolbar because
+            // it acts on the row selected in the list right below it, not on the tool as a whole.
+            // Always enabled, like Add/Remove: the "exactly one row" rule is checked on click
+            // rather than by watching lvTeams.SelectedIndexChanged, which fires once per row and
+            // would turn every repopulation of a large selection into thousands of handler calls.
+            this.tsbInspect.Text = "Inspect in Role Inspector";
+            this.tsbInspect.Image = CreateInspectIcon();
+            this.tsbInspect.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
+            this.tsbInspect.ToolTipText =
+                "Open the selected team or user in the \"User/Team Role Inspector\" tool, which shows " +
+                "every role it holds - directly and, for a user, via team membership.\r\n" +
+                "Select exactly one row first. XrmToolBox opens the tool if it isn't already open, " +
+                "and reports it if the tool isn't installed.";
+            this.tsbInspect.Click += new System.EventHandler(this.tsbInspect_Click);
+
+            this.modeStrip.Items.AddRange(new ToolStripItem[]
+            {
+                this.tsbUsersMode, this.tssInspect, this.tsbInspect
+            });
             this.modeStrip.Dock = DockStyle.Top;
             this.modeStrip.GripStyle = ToolStripGripStyle.Hidden;
 
@@ -168,7 +175,7 @@ namespace BuMatrixSecurityRoleAssigner
 
             this.toolStrip.Items.AddRange(new ToolStripItem[]
             {
-                this.tsbLoad, this.tsbInspect, this.tssBeforeTeamFilters, this.tshIgnoreAgentTeams,
+                this.tsbLoad, this.tssBeforeTeamFilters, this.tshIgnoreAgentTeams,
                 this.tssBeforeRemoveAllBus, this.tshRemoveAllBus
             });
             this.toolStrip.Location = new System.Drawing.Point(0, 0);

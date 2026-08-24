@@ -77,7 +77,7 @@ the package version. Smoke-tested against a live dev org — successful.
   scrambling names inside a group. No sort is imposed until a header is clicked - the service's
   own default order stands.
 - **Role Inspector handoff (#17).** The control implements XrmToolBox's `IMessageBusHost`, and
-  the **Inspect in Role Inspector** toolbar button raises `OnOutgoingMessage` targeting
+  the **Inspect in Role Inspector** button raises `OnOutgoingMessage` targeting
   `"User/Team Role Inspector"` (matched by the host against that tool's MEF `ExportMetadata`
   name - a rename there breaks this silently, with no compiler error). The host cold-launches
   the target if it isn't open, scopes it to the same connection, and shows its own error if the
@@ -85,7 +85,9 @@ the package version. Smoke-tested against a live dev org — successful.
   is a **string** (`RoleHandoff`), not an object: `TargetArgument` is `dynamic`, but the two
   tools are separately built assemblies that cannot name each other's types. `OnIncomingMessage`
   is a deliberate no-op - this tool only sends. One row only, checked on click rather than by
-  watching `SelectedIndexChanged`, which fires per row. See
+  watching `SelectedIndexChanged`, which fires per row. The button sits on the mode strip above
+  the target grid rather than on the main toolbar: it acts on the row selected there, not on the
+  tool as a whole. See
   `docs/research/xrmtoolbox-inter-plugin-communication.md`.
 - **Idempotent.** Each target's current roles are read first (`GetExistingRoleIds`), so add skips
   already-assigned pairs and remove skips not-assigned pairs — no duplicate-key errors, safe to

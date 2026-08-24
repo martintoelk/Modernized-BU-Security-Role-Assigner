@@ -111,8 +111,9 @@ copying them can cause version conflicts. Restart XrmToolBox; the plugin appears
 
 ### Inspect a team or user
 
-Select a single row on the left and click **Inspect in Role Inspector** to open it in the
-companion tool [User/Team Role Inspector](https://github.com/martintoelk/User-Team-Role-Inspector-with-Matrix-BU),
+Select a single row on the left, then click **Inspect in Role Inspector** on the strip above
+that list, to open it in the companion tool
+[User/Team Role Inspector](https://github.com/martintoelk/User-Team-Role-Inspector-with-Matrix-BU),
 which lists every role that team or user holds — directly and, for a user, via team membership.
 
 XrmToolBox does the switching: it opens the Inspector if it isn't already open, on the same
