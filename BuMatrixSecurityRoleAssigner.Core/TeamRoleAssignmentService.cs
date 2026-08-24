@@ -34,11 +34,12 @@ namespace BuMatrixSecurityRoleAssigner.Core
             _service = service ?? throw new ArgumentNullException(nameof(service));
         }
 
-        public List<TeamItem> RetrieveTeams()
+        public List<TeamItem> RetrieveTeams(bool ignorePowerVirtualAgentTeams = true)
         {
             var query = new QueryExpression(Team.EntityLogicalName)
             {
-                ColumnSet = new ColumnSet(Team.Fields.Name, Team.Fields.BusinessUnitId, Team.Fields.TeamType),
+                ColumnSet = new ColumnSet(Team.Fields.Name, Team.Fields.BusinessUnitId, Team.Fields.TeamType,
+                    Team.Fields.Description),
                 PageInfo = new PagingInfo { Count = 5000, PageNumber = 1 }
             };
             // Access teams can't hold security roles, so they're never valid targets - exclude
@@ -47,6 +48,11 @@ namespace BuMatrixSecurityRoleAssigner.Core
             // any other target type that legitimately can't hold a role).
             // team_type.Zugreifen (org language is German) is the generated name for the "Access" team type.
             query.Criteria.AddCondition(Team.Fields.TeamType, ConditionOperator.NotEqual, (int)team_type.Zugreifen);
+            if (ignorePowerVirtualAgentTeams)
+            {
+                query.Criteria.AddCondition(Team.Fields.Description, ConditionOperator.DoesNotContain,
+                    "power virtual agents");
+            }
             query.AddOrder(Team.Fields.Name, OrderType.Ascending);
 
             var list = new List<TeamItem>();

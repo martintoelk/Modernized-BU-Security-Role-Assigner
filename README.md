@@ -18,6 +18,8 @@ auto-detected at run time rather than a manual toggle.
 - Right list: every security role, with the **Business Unit** it belongs to (multi-select).
 - **Add roles to team(s)/user(s)** / **Remove roles from team(s)/user(s)** buttons, plus a
   **Remove from all BUs** checkbox for the remove case (see [Business units](#business-units)).
+- **Ignore Agent Teams** checkbox, on by default; on the next refresh it excludes teams whose
+  description contains “power virtual agents”.
 - Quick text filter above each list.
 - Click a column header to sort that list by it; click again to reverse. An arrow marks the
   sorted column, and the sort (and your selection) survives filtering.
@@ -30,7 +32,7 @@ auto-detected at run time rather than a manual toggle.
 - [x] First verified build
 - [x] Smoke test against a dev org
 - [x] Hand a selected team/user to the "User/Team Role Inspector" tool
-- [ ] Live XrmToolBox smoke test of the two-tool handoff
+- [x] Live XrmToolBox smoke test of the two-tool handoff
 
 ## Business units
 
@@ -99,11 +101,13 @@ copying them can cause version conflicts. Restart XrmToolBox; the plugin appears
 
 1. Open the plugin and connect to an environment.
 2. Click **Load / Refresh**.
-3. Optionally click the **Mode: Teams / Mode: Users** toggle to switch the left list.
-4. Select one or more teams/users (left) and one or more roles (right).
-5. For removal, optionally check **Remove from all BUs** (see [Business units](#business-units)).
-6. Click **Add roles to team(s)/user(s)** or **Remove roles from team(s)/user(s)**.
-7. Read the summary dialog.
+3. Optionally clear **Ignore Agent Teams**, then click **Load / Refresh** to include Power
+   Virtual Agent infrastructure teams.
+4. Optionally click the **Mode: Teams / Mode: Users** toggle to switch the left list.
+5. Select one or more teams/users (left) and one or more roles (right).
+6. For removal, optionally check **Remove from all BUs** (see [Business units](#business-units)).
+7. Click **Add roles to team(s)/user(s)** or **Remove roles from team(s)/user(s)**.
+8. Read the summary dialog.
 
 ### Inspect a team or user
 
@@ -115,8 +119,8 @@ XrmToolBox does the switching: it opens the Inspector if it isn't already open, 
 connection, and reports it itself if the tool isn't installed. Install it from the Tool Library
 (search "User/Team Role Inspector") if that happens.
 
-The handoff payload and routing contract are unit-tested, but this repository has not yet run a
-live two-tool XrmToolBox smoke test.
+The handoff payload and routing contract are unit-tested and the two-tool flow has passed a live
+XrmToolBox smoke test.
 
 ## Files
 

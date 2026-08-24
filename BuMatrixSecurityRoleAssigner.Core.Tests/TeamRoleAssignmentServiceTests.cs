@@ -40,6 +40,33 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         }
 
         [Fact]
+        public void RetrieveTeams_ExcludesPowerVirtualAgentTeamsByDefault()
+        {
+            var fake = new FakeOrganizationService();
+            fake.SeedTeam(Guid.NewGuid(), "Sales Team", RootBuId, "Root BU", "Owner", "Used by Power Virtual Agents");
+            fake.SeedTeam(Guid.NewGuid(), "Normal Team", RootBuId, "Root BU", "Owner", "Used by a business process");
+            fake.SeedTeam(Guid.NewGuid(), "Undescribed Team", RootBuId, "Root BU", "Owner");
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var teams = sut.RetrieveTeams();
+
+            Assert.Equal(2, teams.Count);
+            Assert.DoesNotContain(teams, t => t.Name == "Sales Team");
+        }
+
+        [Fact]
+        public void RetrieveTeams_IncludesPowerVirtualAgentTeamsWhenIgnoreIsDisabled()
+        {
+            var fake = new FakeOrganizationService();
+            fake.SeedTeam(Guid.NewGuid(), "Agent Team", RootBuId, "Root BU", "Owner", "POWER VIRTUAL AGENTS managed team");
+            var sut = new TeamRoleAssignmentService(fake);
+
+            var teams = sut.RetrieveTeams(ignorePowerVirtualAgentTeams: false);
+
+            Assert.Contains(teams, t => t.Name == "Agent Team");
+        }
+
+        [Fact]
         public void RetrieveRoles_FallsBackRootRoleIdToOwnId_WhenNoParentRoot()
         {
             var fake = new FakeOrganizationService();

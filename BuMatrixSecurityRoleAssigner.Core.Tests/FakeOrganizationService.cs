@@ -59,11 +59,14 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
             return entity;
         }
 
-        public Entity SeedTeam(Guid id, string name, Guid businessUnitId, string businessUnitName, string teamType)
+        public Entity SeedTeam(Guid id, string name, Guid businessUnitId, string businessUnitName,
+            string teamType, string description = null)
         {
             var team = new Entity("team", id) { ["name"] = name };
             if (businessUnitId != Guid.Empty)
                 team["businessunitid"] = new EntityReference("businessunit", businessUnitId) { Name = businessUnitName };
+            if (description != null)
+                team["description"] = description;
             // team_type option set values, per the generated entity: Owner = 0, Access = 1,
             // Security Group = 2, Office Group = 3.
             var teamTypeCode = teamType == "Access" ? 1 : teamType == "Security Group" ? 2 : teamType == "Office Group" ? 3 : 0;
@@ -292,7 +295,9 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         private static bool MatchesCondition(Entity entity, ConditionExpression condition)
         {
             if (condition.Values.Count != 1 ||
-                (condition.Operator != ConditionOperator.Equal && condition.Operator != ConditionOperator.NotEqual))
+                (condition.Operator != ConditionOperator.Equal &&
+                 condition.Operator != ConditionOperator.NotEqual &&
+                 condition.Operator != ConditionOperator.DoesNotContain))
                 return true; // unsupported operators are permissive - out of scope for this fake
 
             bool equal;
@@ -305,6 +310,11 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
                 var actual = entity.GetAttributeValue<object>(condition.AttributeName);
                 if (actual is OptionSetValue optionSetValue)
                     actual = optionSetValue.Value;
+                if (condition.Operator == ConditionOperator.DoesNotContain)
+                {
+                    var text = actual as string;
+                    return text == null || text.IndexOf((string)condition.Values[0], StringComparison.OrdinalIgnoreCase) < 0;
+                }
                 equal = Equals(actual, condition.Values[0]);
             }
 

@@ -92,6 +92,9 @@ the package version. Smoke-tested against a live dev org — successful.
   re-run.
 - **Access teams** can't hold security roles; the `Associate`/`Disassociate` error is caught
   per target and surfaced in the summary without aborting the batch.
+- **Ignore Agent Teams.** The toolbar checkbox is on by default. When enabled, `RetrieveTeams`
+  adds a case-insensitive `DoesNotContain` filter on `description` for `power virtual agents`;
+  clearing it and refreshing includes those infrastructure teams again.
 - **Paging** on all loads (`PagingInfo`, 5000/page + paging cookie) so it won't truncate large
   orgs at 5k.
 - **Progress in role units.** `AssignOrRemove` denominates progress in (target × role) units, not
@@ -144,8 +147,7 @@ on an already-published version).
 2. The message bus is symmetric but only wired one way. A "assign roles to what I'm inspecting"
    action in the Inspector would send back here, which is why `RoleHandoff` is a shared format
    rather than a one-off; it would need a real `OnIncomingMessage` on this side.
-3. The handoff has not been exercised against a live XrmToolBox host - the routing behavior is
-   confirmed from the host's source, not from a run.
+3. The handoff has been exercised successfully against a live XrmToolBox host.
 
 ## Conventions
 

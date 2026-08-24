@@ -11,6 +11,9 @@ namespace BuMatrixSecurityRoleAssigner
         private ToolStrip toolStrip;
         private ToolStripButton tsbLoad;
         private ToolStripButton tsbInspect;
+        private ToolStripSeparator tssBeforeTeamFilters;
+        private CheckBox chkIgnoreAgentTeams;
+        private ToolStripControlHost tshIgnoreAgentTeams;
         private ToolStripSeparator tssBeforeRemoveAllBus;
         private CheckBox chkRemoveAllBus;
         private ToolStripControlHost tshRemoveAllBus;
@@ -49,6 +52,8 @@ namespace BuMatrixSecurityRoleAssigner
             this.toolStrip = new ToolStrip();
             this.tsbLoad = new ToolStripButton();
             this.tsbInspect = new ToolStripButton();
+            this.tssBeforeTeamFilters = new ToolStripSeparator();
+            this.chkIgnoreAgentTeams = new CheckBox();
             this.tssBeforeRemoveAllBus = new ToolStripSeparator();
             this.chkRemoveAllBus = new CheckBox();
 
@@ -146,9 +151,25 @@ namespace BuMatrixSecurityRoleAssigner
                     "assigned to the selected team(s)/user(s)."
             };
 
+            // Power Virtual Agent infrastructure teams have descriptions containing this phrase
+            // and are not useful role-assignment targets for most users. The setting is a query
+            // option, so a change takes effect on the next Load / Refresh.
+            this.chkIgnoreAgentTeams.Text = "Ignore Agent Teams";
+            this.chkIgnoreAgentTeams.AutoSize = true;
+            this.chkIgnoreAgentTeams.Checked = true;
+            this.chkIgnoreAgentTeams.Padding = new Padding(4, 0, 4, 0);
+
+            this.tshIgnoreAgentTeams = new ToolStripControlHost(this.chkIgnoreAgentTeams)
+            {
+                ToolTipText =
+                    "When checked (default), Load / Refresh excludes teams whose description contains " +
+                    "\"power virtual agents\". Uncheck it to include those teams."
+            };
+
             this.toolStrip.Items.AddRange(new ToolStripItem[]
             {
-                this.tsbLoad, this.tsbInspect, this.tssBeforeRemoveAllBus, this.tshRemoveAllBus
+                this.tsbLoad, this.tsbInspect, this.tssBeforeTeamFilters, this.tshIgnoreAgentTeams,
+                this.tssBeforeRemoveAllBus, this.tshRemoveAllBus
             });
             this.toolStrip.Location = new System.Drawing.Point(0, 0);
             this.toolStrip.GripStyle = ToolStripGripStyle.Hidden;

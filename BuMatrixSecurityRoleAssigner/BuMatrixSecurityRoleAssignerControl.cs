@@ -93,13 +93,16 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void LoadData()
         {
+            // Read UI state before WorkAsync moves the query to the background thread.
+            var ignorePowerVirtualAgentTeams = chkIgnoreAgentTeams.Checked;
+
             WorkAsync(new WorkAsyncInfo
             {
                 Message = "Loading teams, users and security roles...",
                 Work = (worker, args) =>
                 {
                     var service = new TeamRoleAssignmentService(Service);
-                    var teams = service.RetrieveTeams();
+                    var teams = service.RetrieveTeams(ignorePowerVirtualAgentTeams);
                     var users = service.RetrieveUsers();
                     var roles = service.RetrieveRoles();
                     var modernizedBuStatus = service.GetModernizedBuStatus();
