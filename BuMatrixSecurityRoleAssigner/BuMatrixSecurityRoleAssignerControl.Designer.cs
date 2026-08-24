@@ -161,6 +161,9 @@ namespace BuMatrixSecurityRoleAssigner
             this.lvRoles.HideSelection = false;
             this.lvRoles.Columns.Add("Security Role", 240);
             this.lvRoles.Columns.Add("Business Unit", 200);
+            // Click-to-sort (issue #23). Sorting is done on repopulation rather than via
+            // ListView.ListViewItemSorter, so it survives the filter box rebuilding the list.
+            this.lvRoles.ColumnClick += new ColumnClickEventHandler(this.lvRoles_ColumnClick);
 
             var rolesPanel = new Panel { Dock = DockStyle.Fill };
             // NOTE: add order = docked controls draw top-most last, so add Fill first, then the Top items.
@@ -225,6 +228,7 @@ namespace BuMatrixSecurityRoleAssigner
             this.lvTeams.Columns.Add("Team", 220);
             this.lvTeams.Columns.Add("Business Unit", 180);
             this.lvTeams.Columns.Add("Type", 130);
+            this.lvTeams.ColumnClick += new ColumnClickEventHandler(this.lvTeams_ColumnClick);
 
             var teamsPanel = new Panel { Dock = DockStyle.Fill };
             teamsPanel.Controls.Add(this.lvTeams);

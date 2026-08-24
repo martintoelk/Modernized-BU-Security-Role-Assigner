@@ -30,6 +30,7 @@ the package version. Smoke-tested against a live dev org — successful.
 |------|---------|
 | `BuMatrixSecurityRoleAssigner.Core/TeamRoleAssignmentService.cs` | Team/user/role data access + add/remove logic; depends only on `IOrganizationService` |
 | `BuMatrixSecurityRoleAssigner.Core/Models.cs` | `TeamItem`, `UserItem` (both implement `IAssignmentTarget`), `RoleItem`, `OperationLog` |
+| `BuMatrixSecurityRoleAssigner.Core/GridSort.cs` | Click-to-sort state + ordering for the two grids; pure, no WinForms types |
 | `BuMatrixSecurityRoleAssigner.Core/Generated/Entities/*.cs` | Early-bound Dataverse entity classes (`Team`, `Role`, `TeamRoles`, `SystemUser`, `SystemUserRoles`, `BusinessUnit`) — **generated, don't hand-edit**. Regenerate with `pac modelbuilder build --entitynamesfilter "team;role;systemuser;businessunit;teamroles;systemuserroles" --outdirectory "BuMatrixSecurityRoleAssigner.Core/Generated" --namespace "BuMatrixSecurityRoleAssigner.Core.Entities" --emitfieldsclasses` |
 | `BuMatrixSecurityRoleAssigner.Core/BuMatrixSecurityRoleAssigner.Core.csproj` | SDK-style class library (net48) |
 | `BuMatrixSecurityRoleAssigner.Core.Tests/` | xUnit test project + hand-rolled `FakeOrganizationService` double — no live org needed |
@@ -65,6 +66,13 @@ the package version. Smoke-tested against a live dev org — successful.
 - **Remove from all BUs.** Remove-only opt-in (`chkRemoveAllBus`, default off): normal remove
   only touches the exact role/BU pair(s) selected; checked, it widens each selection to every BU
   copy of that logical role (via `RootRoleId`) currently assigned to the selected targets.
+- **Click-to-sort grids.** Both lists sort on a column-header click (`GridSort` in Core -
+  pure, unit-tested, no WinForms types). Sorting is applied when the list is repopulated
+  rather than through `ListView.ListViewItemSorter`, so it survives the filter boxes
+  rebuilding the list; `Fill` also carries the multi-selection across a repopulation by model
+  identity. Ties break on the name column so a coarse sort (BU, team type) groups rows without
+  scrambling names inside a group. No sort is imposed until a header is clicked - the service's
+  own default order stands.
 - **Idempotent.** Each target's current roles are read first (`GetExistingRoleIds`), so add skips
   already-assigned pairs and remove skips not-assigned pairs — no duplicate-key errors, safe to
   re-run.

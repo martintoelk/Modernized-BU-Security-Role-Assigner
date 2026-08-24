@@ -20,6 +20,12 @@ namespace BuMatrixSecurityRoleAssigner
         // confusing one-row-per-BU-copy list for what is really one logical role.
         private ModernizedBuStatus _modernizedBuStatus = ModernizedBuStatus.Unknown;
 
+        // Click-to-sort state, one per grid (issue #23). Held here rather than in the ListViews
+        // so it survives repopulation - the lists are rebuilt from the caches on every filter
+        // keystroke and on the Teams/Users toggle.
+        private readonly GridSort _targetSort = new GridSort();
+        private readonly GridSort _roleSort = new GridSort();
+
         // Teams vs Users - never mixed. tsbUsersMode.Checked is the single source of truth; this
         // just makes call sites read as "which mode", not "which checkbox".
         private bool UsersMode => tsbUsersMode.Checked;
@@ -46,6 +52,18 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void btnRemove_Click(object sender, EventArgs e) =>
             ExecuteMethod(() => AssignOrRemove(add: false));
+
+        private void lvTeams_ColumnClick(object sender, ColumnClickEventArgs e)
+        {
+            _targetSort.HeaderClicked(e.Column);
+            PopulateTargetList();
+        }
+
+        private void lvRoles_ColumnClick(object sender, ColumnClickEventArgs e)
+        {
+            _roleSort.HeaderClicked(e.Column);
+            PopulateRoleList();
+        }
 
         private void txtTeamFilter_TextChanged(object sender, EventArgs e) => PopulateTargetList();
 
@@ -112,34 +130,77 @@ namespace BuMatrixSecurityRoleAssigner
         private void PopulateTargetList()
         {
             var filter = txtTeamFilter.Text?.Trim();
-            lvTeams.BeginUpdate();
-            lvTeams.Items.Clear();
 
+            IEnumerable<ListViewItem> rows;
             if (UsersMode)
             {
-                foreach (var u in _allUsers.Where(u => Match(filter, u.Name, u.BusinessUnitName)))
-                {
-                    var item = new ListViewItem(u.Name);
-                    item.SubItems.Add(u.BusinessUnitName);
-                    item.SubItems.Add(u.IsDisabled ? "Yes" : "");
-                    item.Tag = u;
-                    lvTeams.Items.Add(item);
-                }
+                rows = _allUsers
+                    .Where(u => Match(filter, u.Name, u.BusinessUnitName))
+                    .Select(u => Row(u, u.Name, u.BusinessUnitName, u.IsDisabled ? "Yes" : ""));
             }
             else
             {
-                foreach (var t in _allTeams.Where(t => Match(filter, t.Name, t.BusinessUnitName)))
+                rows = _allTeams
+                    .Where(t => Match(filter, t.Name, t.BusinessUnitName))
+                    .Select(t => Row(t, t.Name, t.BusinessUnitName, t.TeamType));
+            }
+
+            Fill(lvTeams, rows, _targetSort);
+            UpdateStatus();
+        }
+
+        /// <summary>A grid row: the cell texts as shown, with the underlying model on the Tag.</summary>
+        private static ListViewItem Row(object model, params string[] cells)
+        {
+            var item = new ListViewItem(cells[0]) { Tag = model };
+            for (var i = 1; i < cells.Length; i++)
+                item.SubItems.Add(cells[i]);
+            return item;
+        }
+
+        // Sorting the built rows (rather than the model lists) keeps "what you sort" identical to
+        // "what you see" - GridSort only ever reads cell text - so one code path sorts both grids
+        // regardless of what their rows are made of.
+        private static void Fill(ListView lv, IEnumerable<ListViewItem> rows, GridSort sort)
+        {
+            // Rows are rebuilt from scratch on every repopulation, so carry the selection over by
+            // model identity - sorting a grid you have already made a selection in must not
+            // silently empty it. Tags are instances from the _all* caches, which only change on a
+            // reload, so reference equality is the right identity here.
+            var selected = new HashSet<object>(lv.SelectedItems.Cast<ListViewItem>().Select(i => i.Tag));
+
+            lv.BeginUpdate();
+            lv.Items.Clear();
+            lv.Items.AddRange(sort.Apply(rows, (r, column) => r.SubItems[column].Text).ToArray());
+
+            // Only the rows that were selected are touched: fresh items come in unselected, and
+            // each assignment is a separate native item-state call - on a large org that would
+            // otherwise cost thousands of them per filter keystroke.
+            ListViewItem anchor = null;
+            if (selected.Count > 0)
+            {
+                foreach (ListViewItem item in lv.Items)
                 {
-                    var item = new ListViewItem(t.Name);
-                    item.SubItems.Add(t.BusinessUnitName);
-                    item.SubItems.Add(t.TeamType);
-                    item.Tag = t;
-                    lvTeams.Items.Add(item);
+                    if (!selected.Contains(item.Tag)) continue;
+                    item.Selected = true;
+                    if (anchor == null) anchor = item;
                 }
             }
 
-            lvTeams.EndUpdate();
-            UpdateStatus();
+            for (var i = 0; i < lv.Columns.Count; i++)
+                lv.Columns[i].Text = sort.DecorateHeader(lv.Columns[i].Text, i);
+            lv.EndUpdate();
+
+            // A restored selection with no focused item leaves the shift-click anchor at index 0,
+            // so the next shift-click would extend from the top of the list instead of from what
+            // the user has selected - silently widening the batch. Scrolling to it also keeps the
+            // selection in view when the sort moved it far down. Done after EndUpdate, since
+            // EnsureVisible can't scroll a list whose painting is still suspended.
+            if (anchor != null)
+            {
+                anchor.Focused = true;
+                anchor.EnsureVisible();
+            }
         }
 
         // Drives the read-only mode indicator above the roles grid (mirrors the Teams/Users
@@ -192,16 +253,10 @@ namespace BuMatrixSecurityRoleAssigner
                            .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
                 : _allRoles;
 
-            lvRoles.BeginUpdate();
-            lvRoles.Items.Clear();
-            foreach (var r in roles.Where(r => Match(filter, r.Name, collapse ? null : r.BusinessUnitName)))
-            {
-                var item = new ListViewItem(r.Name);
-                item.SubItems.Add(collapse ? "" : r.BusinessUnitName);
-                item.Tag = r;
-                lvRoles.Items.Add(item);
-            }
-            lvRoles.EndUpdate();
+            Fill(lvRoles,
+                 roles.Where(r => Match(filter, r.Name, collapse ? null : r.BusinessUnitName))
+                      .Select(r => Row(r, r.Name, collapse ? "" : r.BusinessUnitName)),
+                 _roleSort);
             UpdateStatus();
         }
 

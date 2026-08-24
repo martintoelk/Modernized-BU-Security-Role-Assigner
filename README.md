@@ -19,6 +19,8 @@ auto-detected at run time rather than a manual toggle.
 - **Add roles to team(s)/user(s)** / **Remove roles from team(s)/user(s)** buttons, plus a
   **Remove from all BUs** checkbox for the remove case (see [Business units](#business-units)).
 - Quick text filter above each list.
+- Click a column header to sort that list by it; click again to reverse. An arrow marks the
+  sorted column, and the sort (and your selection) survives filtering.
 
 ## Roadmap
 
