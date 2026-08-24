@@ -94,28 +94,44 @@ namespace BuMatrixSecurityRoleAssigner.Core
             var values = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var pair in text.Substring(Prefix.Length).Split('&'))
             {
-                if (pair.Length == 0) continue;
+                if (pair.Length == 0) return false;
                 var split = pair.IndexOf('=');
-                if (split <= 0) continue;
-                // Last one wins; a duplicated key is malformed either way and this keeps the
-                // parse total rather than adding a failure mode nobody can act on.
-                values[pair.Substring(0, split)] = pair.Substring(split + 1);
+                if (split <= 0) return false;
+                var key = pair.Substring(0, split);
+                if (values.ContainsKey(key)) return false;
+                values[key] = pair.Substring(split + 1);
             }
 
             if (!values.TryGetValue("v", out var version) || version != Version) return false;
-            if (!values.TryGetValue("entity", out var entity) || entity.Length == 0) return false;
+            if (!values.TryGetValue("entity", out var rawEntity) ||
+                !TryUnescape(rawEntity, out var entity) ||
+                (entity != "team" && entity != "systemuser")) return false;
             if (!values.TryGetValue("id", out var rawId)) return false;
             if (!Guid.TryParse(rawId, out var id) || id == Guid.Empty) return false;
 
+            Guid? businessUnitId = null;
+            if (values.TryGetValue("buid", out var rawBuId))
+            {
+                if (!Guid.TryParse(rawBuId, out var buId) || buId == Guid.Empty) return false;
+                businessUnitId = buId;
+            }
+
+            string name = null;
+            if (values.TryGetValue("name", out var rawName) && !TryUnescape(rawName, out name))
+                return false;
+
+            string businessUnitName = null;
+            if (values.TryGetValue("bu", out var rawBusinessUnitName) &&
+                !TryUnescape(rawBusinessUnitName, out businessUnitName))
+                return false;
+
             handoff = new RoleHandoff
             {
-                Entity = Unescape(entity),
+                Entity = entity,
                 Id = id,
-                Name = values.TryGetValue("name", out var name) ? Unescape(name) : null,
-                BusinessUnitId = values.TryGetValue("buid", out var rawBuId) && Guid.TryParse(rawBuId, out var buId) && buId != Guid.Empty
-                    ? buId
-                    : (Guid?)null,
-                BusinessUnitName = values.TryGetValue("bu", out var bu) ? Unescape(bu) : null
+                Name = name,
+                BusinessUnitId = businessUnitId,
+                BusinessUnitName = businessUnitName
             };
             return true;
         }
@@ -123,13 +139,37 @@ namespace BuMatrixSecurityRoleAssigner.Core
         private static string Escape(string value) =>
             string.IsNullOrEmpty(value) ? string.Empty : Uri.EscapeDataString(value);
 
-        private static string Unescape(string value)
+        private static bool TryUnescape(string value, out string result)
         {
-            // A stray '%' that isn't a valid escape makes UnescapeDataString throw on .NET
-            // Framework. The payload is off the wire, so take it as "not ours" rather than
-            // letting it surface as an exception in the receiving tool's UI.
-            try { return Uri.UnescapeDataString(value); }
-            catch (UriFormatException) { return value; }
+            // UnescapeDataString is permissive about malformed percent sequences on some .NET
+            // Framework versions. Validate the wire encoding first so a malformed message is
+            // rejected consistently rather than being treated as a different valid value.
+            for (var i = 0; i < value.Length; i++)
+            {
+                if (value[i] != '%') continue;
+                if (i + 2 >= value.Length || !IsHex(value[i + 1]) || !IsHex(value[i + 2]))
+                {
+                    result = null;
+                    return false;
+                }
+                i += 2;
+            }
+
+            try
+            {
+                result = Uri.UnescapeDataString(value);
+                return true;
+            }
+            catch (UriFormatException)
+            {
+                result = null;
+                return false;
+            }
         }
+
+        private static bool IsHex(char value) =>
+            (value >= '0' && value <= '9') ||
+            (value >= 'a' && value <= 'f') ||
+            (value >= 'A' && value <= 'F');
     }
 }

@@ -145,5 +145,31 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         {
             Assert.False(RoleHandoff.TryParse($"xtbrolehandoff:v=1&entity=team&id={Guid.Empty}", out _));
         }
+
+        [Theory]
+        [InlineData("account")]
+        [InlineData("Team")]
+        [InlineData("businessunit")]
+        public void RejectsHandoffsForEntitiesThatCannotBeInspected(string entity)
+        {
+            var payload = $"xtbrolehandoff:v=1&entity={entity}&id=11111111-1111-1111-1111-111111111111";
+
+            Assert.False(RoleHandoff.TryParse(payload, out var parsed));
+            Assert.Null(parsed);
+        }
+
+        [Theory]
+        [InlineData("xtbrolehandoff:v=1&entity=team%ZZ&id=11111111-1111-1111-1111-111111111111")]
+        [InlineData("xtbrolehandoff:v=1&entity=team&id=11111111-1111-1111-1111-111111111111&name=bad%ZZ")]
+        [InlineData("xtbrolehandoff:v=1&entity=team&id=11111111-1111-1111-1111-111111111111&buid=22222222-2222-2222-2222-222222222222&bu=bad%ZZ")]
+        [InlineData("xtbrolehandoff:v=1&entity=team&id=11111111-1111-1111-1111-111111111111&garbage")]
+        [InlineData("xtbrolehandoff:v=1&entity=team&entity=systemuser&id=11111111-1111-1111-1111-111111111111")]
+        [InlineData("xtbrolehandoff:v=1&entity=team&id=11111111-1111-1111-1111-111111111111&buid=not-a-guid")]
+        [InlineData("xtbrolehandoff:v=1&entity=team&id=11111111-1111-1111-1111-111111111111&buid=00000000-0000-0000-0000-000000000000")]
+        public void RejectsHandoffsWithMalformedEscapedValues(string payload)
+        {
+            Assert.False(RoleHandoff.TryParse(payload, out var parsed));
+            Assert.Null(parsed);
+        }
     }
 }

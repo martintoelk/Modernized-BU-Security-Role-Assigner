@@ -30,6 +30,7 @@ auto-detected at run time rather than a manual toggle.
 - [x] First verified build
 - [x] Smoke test against a dev org
 - [x] Hand a selected team/user to the "User/Team Role Inspector" tool
+- [ ] Live XrmToolBox smoke test of the two-tool handoff
 
 ## Business units
 
@@ -113,6 +114,9 @@ which lists every role that team or user holds — directly and, for a user, via
 XrmToolBox does the switching: it opens the Inspector if it isn't already open, on the same
 connection, and reports it itself if the tool isn't installed. Install it from the Tool Library
 (search "User/Team Role Inspector") if that happens.
+
+The handoff payload and routing contract are unit-tested, but this repository has not yet run a
+live two-tool XrmToolBox smoke test.
 
 ## Files
 

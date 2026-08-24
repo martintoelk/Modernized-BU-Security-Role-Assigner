@@ -32,6 +32,7 @@ the package version. Smoke-tested against a live dev org — successful.
 | `BuMatrixSecurityRoleAssigner.Core/Models.cs` | `TeamItem`, `UserItem` (both implement `IAssignmentTarget`), `RoleItem`, `OperationLog` |
 | `BuMatrixSecurityRoleAssigner.Core/GridSort.cs` | Click-to-sort state + ordering for the two grids; pure, no WinForms types |
 | `BuMatrixSecurityRoleAssigner.Core/RoleHandoff.cs` | Wire format for the message-bus handoff to "User/Team Role Inspector"; string in, string out, no WinForms/XTB types |
+| `BuMatrixSecurityRoleAssigner.Core/SelectionMemory.cs` | Filter-safe selection state for rebuilt grids |
 | `BuMatrixSecurityRoleAssigner.Core/Generated/Entities/*.cs` | Early-bound Dataverse entity classes (`Team`, `Role`, `TeamRoles`, `SystemUser`, `SystemUserRoles`, `BusinessUnit`) — **generated, don't hand-edit**. Regenerate with `pac modelbuilder build --entitynamesfilter "team;role;systemuser;businessunit;teamroles;systemuserroles" --outdirectory "BuMatrixSecurityRoleAssigner.Core/Generated" --namespace "BuMatrixSecurityRoleAssigner.Core.Entities" --emitfieldsclasses` |
 | `BuMatrixSecurityRoleAssigner.Core/BuMatrixSecurityRoleAssigner.Core.csproj` | SDK-style class library (net48) |
 | `BuMatrixSecurityRoleAssigner.Core.Tests/` | xUnit test project + hand-rolled `FakeOrganizationService` double — no live org needed |
@@ -70,8 +71,9 @@ the package version. Smoke-tested against a live dev org — successful.
 - **Click-to-sort grids.** Both lists sort on a column-header click (`GridSort` in Core -
   pure, unit-tested, no WinForms types). Sorting is applied when the list is repopulated
   rather than through `ListView.ListViewItemSorter`, so it survives the filter boxes
-  rebuilding the list; `Fill` also carries the multi-selection across a repopulation by model
-  identity. Ties break on the name column so a coarse sort (BU, team type) groups rows without
+  rebuilding the list; `SelectionMemory` carries the multi-selection across a repopulation by
+  model identity, including rows temporarily hidden by a filter. Ties break on the name column so
+  a coarse sort (BU, team type) groups rows without
   scrambling names inside a group. No sort is imposed until a header is clicked - the service's
   own default order stands.
 - **Role Inspector handoff (#17).** The control implements XrmToolBox's `IMessageBusHost`, and

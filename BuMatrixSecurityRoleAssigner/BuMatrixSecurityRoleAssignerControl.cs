@@ -29,6 +29,8 @@ namespace BuMatrixSecurityRoleAssigner
         // keystroke and on the Teams/Users toggle.
         private readonly GridSort _targetSort = new GridSort();
         private readonly GridSort _roleSort = new GridSort();
+        private readonly SelectionMemory<object> _targetSelection = new SelectionMemory<object>();
+        private readonly SelectionMemory<object> _roleSelection = new SelectionMemory<object>();
 
         // Teams vs Users - never mixed. tsbUsersMode.Checked is the single source of truth; this
         // just makes call sites read as "which mode", not "which checkbox".
@@ -117,6 +119,12 @@ namespace BuMatrixSecurityRoleAssigner
                     _allUsers = result.Item2;
                     _allRoles = result.Item3;
                     _modernizedBuStatus = result.Item4;
+                    // Do not let Populate* capture selections from rows belonging to the old
+                    // cache before the selection memories are reset.
+                    lvTeams.Items.Clear();
+                    lvRoles.Items.Clear();
+                    _targetSelection.Clear();
+                    _roleSelection.Clear();
                     UpdateBuModeIndicator();
                     PopulateTargetList();
                     PopulateRoleList();
@@ -135,6 +143,7 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void PopulateTargetList()
         {
+            CaptureSelection(lvTeams, _targetSelection);
             var filter = txtTeamFilter.Text?.Trim();
 
             IEnumerable<ListViewItem> rows;
@@ -151,7 +160,7 @@ namespace BuMatrixSecurityRoleAssigner
                     .Select(t => Row(t, t.Name, t.BusinessUnitName, t.TeamType));
             }
 
-            Fill(lvTeams, rows, _targetSort);
+            Fill(lvTeams, rows, _targetSort, _targetSelection);
             UpdateStatus();
         }
 
@@ -167,30 +176,29 @@ namespace BuMatrixSecurityRoleAssigner
         // Sorting the built rows (rather than the model lists) keeps "what you sort" identical to
         // "what you see" - GridSort only ever reads cell text - so one code path sorts both grids
         // regardless of what their rows are made of.
-        private static void Fill(ListView lv, IEnumerable<ListViewItem> rows, GridSort sort)
+        private static void CaptureSelection(ListView lv, SelectionMemory<object> selection)
         {
-            // Rows are rebuilt from scratch on every repopulation, so carry the selection over by
-            // model identity - sorting a grid you have already made a selection in must not
-            // silently empty it. Tags are instances from the _all* caches, which only change on a
-            // reload, so reference equality is the right identity here.
-            var selected = new HashSet<object>(lv.SelectedItems.Cast<ListViewItem>().Select(i => i.Tag));
+            selection.Capture(
+                lv.Items.Cast<ListViewItem>().Select(item => item.Tag),
+                lv.SelectedItems.Cast<ListViewItem>().Select(item => item.Tag));
+        }
 
+        private static void Fill(ListView lv, IEnumerable<ListViewItem> rows, GridSort sort,
+            SelectionMemory<object> selection)
+        {
             lv.BeginUpdate();
             lv.Items.Clear();
             lv.Items.AddRange(sort.Apply(rows, (r, column) => r.SubItems[column].Text).ToArray());
 
-            // Only the rows that were selected are touched: fresh items come in unselected, and
-            // each assignment is a separate native item-state call - on a large org that would
-            // otherwise cost thousands of them per filter keystroke.
+            // Fresh items come in unselected, and each assignment is a separate native
+            // item-state call - on a large org that would otherwise cost thousands of them per
+            // filter keystroke. SelectionMemory remembers rows hidden by the current filter too.
             ListViewItem anchor = null;
-            if (selected.Count > 0)
+            foreach (ListViewItem item in lv.Items)
             {
-                foreach (ListViewItem item in lv.Items)
-                {
-                    if (!selected.Contains(item.Tag)) continue;
-                    item.Selected = true;
-                    if (anchor == null) anchor = item;
-                }
+                if (!selection.Contains(item.Tag)) continue;
+                item.Selected = true;
+                if (anchor == null) anchor = item;
             }
 
             for (var i = 0; i < lv.Columns.Count; i++)
@@ -245,6 +253,7 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void PopulateRoleList()
         {
+            CaptureSelection(lvRoles, _roleSelection);
             var filter = txtRoleFilter.Text?.Trim();
             var collapse = CollapseRolesByRootRole;
             if (_buColumnWidthSetForCollapse != collapse)
@@ -253,17 +262,22 @@ namespace BuMatrixSecurityRoleAssigner
                 _buColumnWidthSetForCollapse = collapse;
             }
 
-            IEnumerable<RoleItem> roles = collapse
-                ? _allRoles.GroupBy(r => r.RootRoleId)
-                           .Select(g => g.FirstOrDefault(r => r.Id == g.Key) ?? g.First())
-                           .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
-                : _allRoles;
+            var roles = RolesForDisplay(collapse);
 
             Fill(lvRoles,
                  roles.Where(r => Match(filter, r.Name, collapse ? null : r.BusinessUnitName))
                       .Select(r => Row(r, r.Name, collapse ? "" : r.BusinessUnitName)),
-                 _roleSort);
+                 _roleSort, _roleSelection);
             UpdateStatus();
+        }
+
+        private IEnumerable<RoleItem> RolesForDisplay(bool collapse)
+        {
+            return collapse
+                ? _allRoles.GroupBy(r => r.RootRoleId)
+                           .Select(g => g.FirstOrDefault(r => r.Id == g.Key) ?? g.First())
+                           .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+                : _allRoles;
         }
 
         private void UpdateStatus()
@@ -277,11 +291,21 @@ namespace BuMatrixSecurityRoleAssigner
                              $"Roles: {lvRoles.Items.Count} shown ({roleTotal} total)";
         }
 
-        private List<IAssignmentTarget> GetSelectedTargets() =>
-            lvTeams.SelectedItems.Cast<ListViewItem>().Select(i => (IAssignmentTarget)i.Tag).ToList();
+        private List<IAssignmentTarget> GetSelectedTargets()
+        {
+            CaptureSelection(lvTeams, _targetSelection);
+            var targets = UsersMode
+                ? _allUsers.Cast<IAssignmentTarget>()
+                : _allTeams.Cast<IAssignmentTarget>();
+            return _targetSelection.Selected(targets.Cast<object>()).Cast<IAssignmentTarget>().ToList();
+        }
 
-        private List<RoleItem> GetSelectedRoles() =>
-            lvRoles.SelectedItems.Cast<ListViewItem>().Select(i => (RoleItem)i.Tag).ToList();
+        private List<RoleItem> GetSelectedRoles()
+        {
+            CaptureSelection(lvRoles, _roleSelection);
+            return _roleSelection.Selected(RolesForDisplay(CollapseRolesByRootRole).Cast<object>())
+                .Cast<RoleItem>().ToList();
+        }
 
         // ------------------------------------------------------------------ Role Inspector handoff
 
