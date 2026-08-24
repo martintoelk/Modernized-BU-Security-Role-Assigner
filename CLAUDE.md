@@ -93,7 +93,8 @@ the package version. Smoke-tested against a live dev org — successful.
 - **Access teams** can't hold security roles; the `Associate`/`Disassociate` error is caught
   per target and surfaced in the summary without aborting the batch.
 - **Ignore Agent Teams.** The toolbar checkbox is on by default. When enabled, `RetrieveTeams`
-  adds a case-insensitive `DoesNotContain` filter on `description` for `power virtual agents`;
+  uses the supported `NotLike`/`Null` QueryExpression filters on `description` to exclude
+  teams containing `power virtual agents` while retaining teams with no description;
   clearing it and refreshing includes those infrastructure teams again.
 - **Paging** on all loads (`PagingInfo`, 5000/page + paging cookie) so it won't truncate large
   orgs at 5k.

@@ -50,8 +50,19 @@ namespace BuMatrixSecurityRoleAssigner.Core
             query.Criteria.AddCondition(Team.Fields.TeamType, ConditionOperator.NotEqual, (int)team_type.Zugreifen);
             if (ignorePowerVirtualAgentTeams)
             {
-                query.Criteria.AddCondition(Team.Fields.Description, ConditionOperator.DoesNotContain,
-                    "power virtual agents");
+                // DoesNotContain is present in the SDK enum but is rejected by some Dataverse
+                // organizations as an unknown QueryExpression operator. NotLike is the supported
+                // QueryExpression string operator; keep rows with no description explicitly because
+                // SQL-style NOT LIKE does not match null values.
+                query.Criteria.AddFilter(new FilterExpression(LogicalOperator.Or)
+                {
+                    Conditions =
+                    {
+                        new ConditionExpression(Team.Fields.Description, ConditionOperator.Null),
+                        new ConditionExpression(Team.Fields.Description, ConditionOperator.NotLike,
+                            "%power virtual agents%")
+                    }
+                });
             }
             query.AddOrder(Team.Fields.Name, OrderType.Ascending);
 

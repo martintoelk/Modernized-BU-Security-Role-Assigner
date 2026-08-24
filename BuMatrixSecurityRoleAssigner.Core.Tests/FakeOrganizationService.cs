@@ -202,10 +202,7 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
                 : Enumerable.Empty<Entity>();
 
             if (query.Criteria != null)
-            {
-                foreach (var condition in query.Criteria.Conditions)
-                    rows = rows.Where(e => MatchesCondition(e, condition));
-            }
+                rows = rows.Where(e => MatchesFilter(e, query.Criteria));
 
             foreach (var link in query.LinkEntities)
             {
@@ -294,10 +291,26 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
 
         private static bool MatchesCondition(Entity entity, ConditionExpression condition)
         {
+            if (condition.Operator == ConditionOperator.DoesNotContain)
+                throw new InvalidOperationException("Unknown Condition Operator: DoesNotContain");
+
+            if (condition.Operator == ConditionOperator.Null)
+                return !entity.Contains(condition.AttributeName) || entity[condition.AttributeName] == null;
+
+            if (condition.Operator == ConditionOperator.NotLike)
+            {
+                var actual = entity.GetAttributeValue<string>(condition.AttributeName);
+                if (actual == null)
+                    return false;
+
+                var pattern = (string)condition.Values[0];
+                var searchText = pattern.Trim('%');
+                return actual.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) < 0;
+            }
+
             if (condition.Values.Count != 1 ||
                 (condition.Operator != ConditionOperator.Equal &&
-                 condition.Operator != ConditionOperator.NotEqual &&
-                 condition.Operator != ConditionOperator.DoesNotContain))
+                 condition.Operator != ConditionOperator.NotEqual))
                 return true; // unsupported operators are permissive - out of scope for this fake
 
             bool equal;
@@ -310,15 +323,28 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
                 var actual = entity.GetAttributeValue<object>(condition.AttributeName);
                 if (actual is OptionSetValue optionSetValue)
                     actual = optionSetValue.Value;
-                if (condition.Operator == ConditionOperator.DoesNotContain)
-                {
-                    var text = actual as string;
-                    return text == null || text.IndexOf((string)condition.Values[0], StringComparison.OrdinalIgnoreCase) < 0;
-                }
                 equal = Equals(actual, condition.Values[0]);
             }
 
             return condition.Operator == ConditionOperator.Equal ? equal : !equal;
+        }
+
+        private static bool MatchesFilter(Entity entity, FilterExpression filter)
+        {
+            var conditionMatches = filter.Conditions.Count == 0
+                ? filter.FilterOperator == LogicalOperator.And
+                : filter.FilterOperator == LogicalOperator.And
+                    ? filter.Conditions.All(condition => MatchesCondition(entity, condition))
+                    : filter.Conditions.Any(condition => MatchesCondition(entity, condition));
+            var childFilterMatches = filter.Filters.Count == 0
+                ? filter.FilterOperator == LogicalOperator.And
+                : filter.FilterOperator == LogicalOperator.And
+                    ? filter.Filters.All(child => MatchesFilter(entity, child))
+                    : filter.Filters.Any(child => MatchesFilter(entity, child));
+
+            return filter.FilterOperator == LogicalOperator.And
+                ? conditionMatches && childFilterMatches
+                : conditionMatches || childFilterMatches;
         }
     }
 }
