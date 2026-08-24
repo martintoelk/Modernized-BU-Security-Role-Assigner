@@ -10,6 +10,8 @@ namespace BuMatrixSecurityRoleAssigner
     {
         private ToolStrip toolStrip;
         private ToolStripButton tsbLoad;
+        private ToolStripButton tsbInspect;
+        private ToolStripSeparator tssBeforeRemoveAllBus;
         private CheckBox chkRemoveAllBus;
         private ToolStripControlHost tshRemoveAllBus;
 
@@ -46,6 +48,8 @@ namespace BuMatrixSecurityRoleAssigner
         {
             this.toolStrip = new ToolStrip();
             this.tsbLoad = new ToolStripButton();
+            this.tsbInspect = new ToolStripButton();
+            this.tssBeforeRemoveAllBus = new ToolStripSeparator();
             this.chkRemoveAllBus = new CheckBox();
 
             this.modeStrip = new ToolStrip();
@@ -78,6 +82,21 @@ namespace BuMatrixSecurityRoleAssigner
             this.tsbLoad.Image = CreateRefreshIcon();
             this.tsbLoad.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
             this.tsbLoad.Click += new System.EventHandler(this.tsbLoad_Click);
+
+            // Hands the one selected team/user to "User/Team Role Inspector" over XrmToolBox's
+            // message bus (issue #17). Always enabled, like Add/Remove: the "exactly one row"
+            // rule is checked on click rather than by watching lvTeams.SelectedIndexChanged,
+            // which fires once per row and would turn every repopulation of a large selection
+            // into thousands of handler calls.
+            this.tsbInspect.Text = "Inspect in Role Inspector";
+            this.tsbInspect.Image = CreateInspectIcon();
+            this.tsbInspect.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
+            this.tsbInspect.ToolTipText =
+                "Open the selected team or user in the \"User/Team Role Inspector\" tool, which shows " +
+                "every role it holds - directly and, for a user, via team membership.\r\n" +
+                "Select exactly one row first. XrmToolBox opens the tool if it isn't already open, " +
+                "and reports it if the tool isn't installed.";
+            this.tsbInspect.Click += new System.EventHandler(this.tsbInspect_Click);
 
             // Mode toggle: off = Teams (default), on = Users. Switching swaps the target list's
             // contents and columns - the two modes are never mixed in one Add/Remove call.
@@ -129,7 +148,7 @@ namespace BuMatrixSecurityRoleAssigner
 
             this.toolStrip.Items.AddRange(new ToolStripItem[]
             {
-                this.tsbLoad, this.tshRemoveAllBus
+                this.tsbLoad, this.tsbInspect, this.tssBeforeRemoveAllBus, this.tshRemoveAllBus
             });
             this.toolStrip.Location = new System.Drawing.Point(0, 0);
             this.toolStrip.GripStyle = ToolStripGripStyle.Hidden;
@@ -345,6 +364,29 @@ namespace BuMatrixSecurityRoleAssigner
                 {
                     g.DrawEllipse(pen, 1f, 1f, 7.5f, 7.5f);
                     g.DrawLine(pen, 8.0f, 8.0f, 12.5f, 12.5f);
+                }
+            }
+            return bmp;
+        }
+
+        // Magnifying glass on a toolbar badge, for the hand-off to the Role Inspector. Same
+        // circle-plus-white-glyph shape as the other toolbar icons; the glyph deliberately
+        // echoes the filter boxes' search icon, since both mean "look at this".
+        internal static Image CreateInspectIcon()
+        {
+            var bmp = new Bitmap(16, 16);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var brush = new SolidBrush(Color.FromArgb(105, 80, 180)))
+                    g.FillEllipse(brush, 0, 0, 16, 16);
+
+                using (var pen = new Pen(Color.White, 1.7f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                {
+                    g.DrawEllipse(pen, 3f, 3f, 6.5f, 6.5f);
+                    g.DrawLine(pen, 9.0f, 9.0f, 12.5f, 12.5f);
                 }
             }
             return bmp;

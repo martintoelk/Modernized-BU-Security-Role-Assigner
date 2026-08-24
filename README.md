@@ -29,6 +29,7 @@ auto-detected at run time rather than a manual toggle.
 - [x] Plugin tile icon
 - [x] First verified build
 - [x] Smoke test against a dev org
+- [x] Hand a selected team/user to the "User/Team Role Inspector" tool
 
 ## Business units
 
@@ -103,12 +104,23 @@ copying them can cause version conflicts. Restart XrmToolBox; the plugin appears
 6. Click **Add roles to team(s)/user(s)** or **Remove roles from team(s)/user(s)**.
 7. Read the summary dialog.
 
+### Inspect a team or user
+
+Select a single row on the left and click **Inspect in Role Inspector** to open it in the
+companion tool [User/Team Role Inspector](https://github.com/martintoelk/User-Team-Role-Inspector-with-Matrix-BU),
+which lists every role that team or user holds — directly and, for a user, via team membership.
+
+XrmToolBox does the switching: it opens the Inspector if it isn't already open, on the same
+connection, and reports it itself if the tool isn't installed. Install it from the Tool Library
+(search "User/Team Role Inspector") if that happens.
+
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `BuMatrixSecurityRoleAssigner.Core/TeamRoleAssignmentService.cs` | Add/remove logic + team/user/role data access, depends only on `IOrganizationService` |
 | `BuMatrixSecurityRoleAssigner.Core/Models.cs` | `TeamItem`, `UserItem`, `RoleItem`, `OperationLog`, `IAssignmentTarget` |
+| `BuMatrixSecurityRoleAssigner.Core/RoleHandoff.cs` | Wire format for the "Inspect in Role Inspector" handoff |
 | `BuMatrixSecurityRoleAssigner.Core/BuMatrixSecurityRoleAssigner.Core.csproj` | Class library (net48), no WinForms/XTB dependency |
 | `BuMatrixSecurityRoleAssigner/Plugin.cs` | XrmToolBox export/metadata (the plugin factory) |
 | `BuMatrixSecurityRoleAssigner/BuMatrixSecurityRoleAssignerControl.cs` | UI wiring, threading (`WorkAsync`), calls into Core |

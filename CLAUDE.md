@@ -31,6 +31,7 @@ the package version. Smoke-tested against a live dev org — successful.
 | `BuMatrixSecurityRoleAssigner.Core/TeamRoleAssignmentService.cs` | Team/user/role data access + add/remove logic; depends only on `IOrganizationService` |
 | `BuMatrixSecurityRoleAssigner.Core/Models.cs` | `TeamItem`, `UserItem` (both implement `IAssignmentTarget`), `RoleItem`, `OperationLog` |
 | `BuMatrixSecurityRoleAssigner.Core/GridSort.cs` | Click-to-sort state + ordering for the two grids; pure, no WinForms types |
+| `BuMatrixSecurityRoleAssigner.Core/RoleHandoff.cs` | Wire format for the message-bus handoff to "User/Team Role Inspector"; string in, string out, no WinForms/XTB types |
 | `BuMatrixSecurityRoleAssigner.Core/Generated/Entities/*.cs` | Early-bound Dataverse entity classes (`Team`, `Role`, `TeamRoles`, `SystemUser`, `SystemUserRoles`, `BusinessUnit`) — **generated, don't hand-edit**. Regenerate with `pac modelbuilder build --entitynamesfilter "team;role;systemuser;businessunit;teamroles;systemuserroles" --outdirectory "BuMatrixSecurityRoleAssigner.Core/Generated" --namespace "BuMatrixSecurityRoleAssigner.Core.Entities" --emitfieldsclasses` |
 | `BuMatrixSecurityRoleAssigner.Core/BuMatrixSecurityRoleAssigner.Core.csproj` | SDK-style class library (net48) |
 | `BuMatrixSecurityRoleAssigner.Core.Tests/` | xUnit test project + hand-rolled `FakeOrganizationService` double — no live org needed |
@@ -73,6 +74,17 @@ the package version. Smoke-tested against a live dev org — successful.
   identity. Ties break on the name column so a coarse sort (BU, team type) groups rows without
   scrambling names inside a group. No sort is imposed until a header is clicked - the service's
   own default order stands.
+- **Role Inspector handoff (#17).** The control implements XrmToolBox's `IMessageBusHost`, and
+  the **Inspect in Role Inspector** toolbar button raises `OnOutgoingMessage` targeting
+  `"User/Team Role Inspector"` (matched by the host against that tool's MEF `ExportMetadata`
+  name - a rename there breaks this silently, with no compiler error). The host cold-launches
+  the target if it isn't open, scopes it to the same connection, and shows its own error if the
+  tool isn't installed, so there is no "is it installed" pre-check here to go stale. The payload
+  is a **string** (`RoleHandoff`), not an object: `TargetArgument` is `dynamic`, but the two
+  tools are separately built assemblies that cannot name each other's types. `OnIncomingMessage`
+  is a deliberate no-op - this tool only sends. One row only, checked on click rather than by
+  watching `SelectedIndexChanged`, which fires per row. See
+  `docs/research/xrmtoolbox-inter-plugin-communication.md`.
 - **Idempotent.** Each target's current roles are read first (`GetExistingRoleIds`), so add skips
   already-assigned pairs and remove skips not-assigned pairs — no duplicate-key errors, safe to
   re-run.
@@ -127,6 +139,11 @@ on an already-published version).
 ## Suggested next steps for the CLI
 
 1. Consider a short `CHANGELOG.md`.
+2. The message bus is symmetric but only wired one way. A "assign roles to what I'm inspecting"
+   action in the Inspector would send back here, which is why `RoleHandoff` is a shared format
+   rather than a one-off; it would need a real `OnIncomingMessage` on this side.
+3. The handoff has not been exercised against a live XrmToolBox host - the routing behavior is
+   confirmed from the host's source, not from a run.
 
 ## Conventions
 

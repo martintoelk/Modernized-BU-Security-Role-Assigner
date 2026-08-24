@@ -5,10 +5,14 @@ using System.Linq;
 using System.Windows.Forms;
 using BuMatrixSecurityRoleAssigner.Core;
 using XrmToolBox.Extensibility;
+using XrmToolBox.Extensibility.Interfaces;
 
 namespace BuMatrixSecurityRoleAssigner
 {
-    public partial class BuMatrixSecurityRoleAssignerControl : PluginControlBase
+    // IMessageBusHost is XrmToolBox's host-mediated channel between tools; implementing it is
+    // what lets this tool hand a selected team/user to the Role Inspector (issue #17). See
+    // OpenInInspector for what the host does with the message.
+    public partial class BuMatrixSecurityRoleAssignerControl : PluginControlBase, IMessageBusHost
     {
         // Full, unfiltered caches. The list views are populated from these (with text filters applied).
         private List<TeamItem> _allTeams = new List<TeamItem>();
@@ -52,6 +56,8 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void btnRemove_Click(object sender, EventArgs e) =>
             ExecuteMethod(() => AssignOrRemove(add: false));
+
+        private void tsbInspect_Click(object sender, EventArgs e) => OpenInInspector();
 
         private void lvTeams_ColumnClick(object sender, ColumnClickEventArgs e)
         {
@@ -276,6 +282,86 @@ namespace BuMatrixSecurityRoleAssigner
 
         private List<RoleItem> GetSelectedRoles() =>
             lvRoles.SelectedItems.Cast<ListViewItem>().Select(i => (RoleItem)i.Tag).ToList();
+
+        // ------------------------------------------------------------------ Role Inspector handoff
+
+        /// <summary>
+        /// Display name of the tool we hand off to, matched by XrmToolBox against that tool's MEF
+        /// <c>ExportMetadata("Name", ...)</c>. String-matched, not type-matched - the two plugins
+        /// never reference each other - so renaming the Inspector's export breaks this silently,
+        /// with no compiler error.
+        /// </summary>
+        private const string InspectorPluginName = "User/Team Role Inspector";
+
+        /// <summary>
+        /// Raised to ask the host to route a message to another tool. XrmToolBox subscribes to
+        /// this on every loaded plugin control and does the routing itself; nothing here talks to
+        /// the other tool directly.
+        /// </summary>
+        public event EventHandler<MessageBusEventArgs> OnOutgoingMessage;
+
+        /// <summary>
+        /// Required by <see cref="IMessageBusHost"/>. This tool only ever sends - nothing targets
+        /// it today - and a receiver that cannot act on a message should ignore it rather than
+        /// fail in front of the user, so this is deliberately a no-op. The reverse direction
+        /// ("assign roles to what I am inspecting") needs a sender in the Inspector first.
+        /// </summary>
+        public void OnIncomingMessage(MessageBusEventArgs message)
+        {
+        }
+
+        /// <summary>
+        /// Hands the selected team/user to the Role Inspector. The host resolves
+        /// <see cref="InspectorPluginName"/> against the installed tools, opens it if it isn't
+        /// already open on this connection, brings it to the front, and delivers the payload -
+        /// and shows its own error if the tool isn't installed, which is why there is no
+        /// "is it installed" check here to get out of date.
+        /// </summary>
+        private void OpenInInspector()
+        {
+            var targets = GetSelectedTargets();
+            var targetNoun = UsersMode ? "user" : "team";
+
+            if (targets.Count == 0)
+            {
+                MessageBox.Show(this, $"Select the {targetNoun} you want to inspect.",
+                    "Nothing to inspect", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // Unlike Add/Remove, this is not a batch operation: the Inspector shows one record at
+            // a time, so silently picking one out of a multi-selection would open something the
+            // user didn't ask for.
+            if (targets.Count > 1)
+            {
+                MessageBox.Show(this,
+                    $"The Role Inspector shows one {targetNoun} at a time. Select a single {targetNoun} to inspect.",
+                    "Select one row", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            // The host subscribes to this on every plugin control it loads, so a null here means
+            // we aren't running under a host that routes messages. Worth saying out loud: every
+            // other outcome on this path reports itself (the host shows its own "Cannot switch to
+            // tool ..." when the target isn't installed), and a button that does nothing at all,
+            // silently, is indistinguishable from a hang.
+            if (OnOutgoingMessage == null)
+            {
+                MessageBox.Show(this,
+                    "This copy of XrmToolBox did not connect the tool-to-tool message bus, so the " +
+                    "Role Inspector can't be opened from here.\r\n\r\n" +
+                    "Open it from the tool list instead.",
+                    "Can't open the Role Inspector", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Sent as a string rather than a RoleHandoff instance: the Inspector is a separate
+            // assembly that cannot name this type. See RoleHandoff's remarks.
+            OnOutgoingMessage(this, new MessageBusEventArgs(InspectorPluginName)
+            {
+                TargetArgument = RoleHandoff.ForTarget(targets[0]).ToPayload()
+            });
+        }
 
         // ------------------------------------------------------------------ Add / Remove
 
