@@ -128,9 +128,9 @@ namespace BuMatrixSecurityRoleAssigner
             this.tsbInspect.Click += new System.EventHandler(this.tsbInspect_Click);
 
             // Checkboxes (below) are the only thing that decides which rows Add/Remove/Inspect
-            // act on - plain row clicks just move the highlight, they no longer add/remove a row
-            // from the batch (issue #25). This button clears every checkbox in one click, since
-            // there was previously no way to empty a multi-selection without re-clicking each row.
+            // act on - the row highlight doesn't (issue #25). A single click anywhere on a row
+            // toggles its checkbox; this button clears every checkbox in one go, since there is
+            // otherwise no way to empty a multi-selection without re-clicking each row.
             this.tsbClearTargets.Text = "Deselect All";
             this.tsbClearTargets.Image = CreateClearIcon();
             this.tsbClearTargets.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
@@ -233,9 +233,9 @@ namespace BuMatrixSecurityRoleAssigner
             this.lvRoles.FullRowSelect = true;
             this.lvRoles.MultiSelect = true;
             this.lvRoles.HideSelection = false;
-            // Checkboxes, not row highlight, are what Add/Remove/Inspect act on (issue #25) - a
-            // plain click just moves the highlight and no longer changes the batch, so a click
-            // elsewhere can no longer silently wipe out a multi-selection.
+            // Checkboxes, not row highlight, are what Add/Remove/Inspect act on (issue #25) - the
+            // highlight never changes the batch, so a click elsewhere can no longer silently wipe
+            // out a multi-selection.
             this.lvRoles.CheckBoxes = true;
             this.lvRoles.Columns.Add("Security Role", 240);
             this.lvRoles.Columns.Add("Business Unit", 200);
@@ -245,6 +245,11 @@ namespace BuMatrixSecurityRoleAssigner
             // Keeps the status bar's "N checked" count live as boxes are ticked, not just on the
             // next repopulation.
             this.lvRoles.ItemChecked += new ItemCheckedEventHandler(this.lvRoles_ItemChecked);
+            // A single click anywhere on a row (un)checks it - the native control otherwise only
+            // toggles on the checkbox glyph itself or on a double-click. MouseDoubleClick is
+            // wired to keep a double-click worth one toggle; see ToggleRowUnderCursor.
+            this.lvRoles.MouseClick += new MouseEventHandler(this.lvRoles_MouseClick);
+            this.lvRoles.MouseDoubleClick += new MouseEventHandler(this.lvRoles_MouseDoubleClick);
 
             var rolesPanel = new Panel { Dock = DockStyle.Fill };
             // NOTE: add order = docked controls draw top-most last, so add Fill first, then the Top items.
@@ -312,6 +317,8 @@ namespace BuMatrixSecurityRoleAssigner
             this.lvTeams.Columns.Add("Type", 130);
             this.lvTeams.ColumnClick += new ColumnClickEventHandler(this.lvTeams_ColumnClick);
             this.lvTeams.ItemChecked += new ItemCheckedEventHandler(this.lvTeams_ItemChecked);
+            this.lvTeams.MouseClick += new MouseEventHandler(this.lvTeams_MouseClick);
+            this.lvTeams.MouseDoubleClick += new MouseEventHandler(this.lvTeams_MouseDoubleClick);
 
             var teamsPanel = new Panel { Dock = DockStyle.Fill };
             teamsPanel.Controls.Add(this.lvTeams);

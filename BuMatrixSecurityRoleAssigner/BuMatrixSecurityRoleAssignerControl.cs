@@ -99,6 +99,41 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void txtTeamFilter_TextChanged(object sender, EventArgs e) => PopulateTargetList();
 
+        // A single left click anywhere on a row toggles that row's checkbox. Out of the box the
+        // native ListView only toggles on the checkbox glyph itself or on a double-click, which
+        // made assembling a batch a pixel-hunt down the left edge of the grid; since the checkbox
+        // is the only thing Add/Remove/Inspect act on (issue #25), the whole row is the natural
+        // hit target. FullRowSelect is on, so HitTest reports the row for a click in any column
+        // (verified: glyph -> StateImage, everywhere else across the row -> Label, past the last
+        // column or below the rows -> no item, which is left alone).
+        private void lvTeams_MouseClick(object sender, MouseEventArgs e) => ToggleRowUnderCursor(lvTeams, e, false);
+
+        private void lvRoles_MouseClick(object sender, MouseEventArgs e) => ToggleRowUnderCursor(lvRoles, e, false);
+
+        // The native control toggles the box on a double-click too, and that toggle lands between
+        // MouseClick and MouseDoubleClick - so on the second click the row has already flipped
+        // twice (once from our own MouseClick above, once natively) and is back where it started.
+        // Flipping once more here keeps a double-click worth exactly one toggle, like the single
+        // click it starts with, rather than silently doing nothing.
+        private void lvTeams_MouseDoubleClick(object sender, MouseEventArgs e) => ToggleRowUnderCursor(lvTeams, e, true);
+
+        private void lvRoles_MouseDoubleClick(object sender, MouseEventArgs e) => ToggleRowUnderCursor(lvRoles, e, true);
+
+        private static void ToggleRowUnderCursor(ListView lv, MouseEventArgs e, bool fromDoubleClick)
+        {
+            if (e.Button != MouseButtons.Left) return;
+
+            var hit = lv.HitTest(e.Location);
+            if (hit.Item == null) return;
+
+            // A click on the glyph was already toggled by the native control - toggling again
+            // would cancel it out. A double-click's native toggle is deliberately not skipped
+            // here; it's the one being compensated for.
+            if (!fromDoubleClick && hit.Location == ListViewHitTestLocations.StateImage) return;
+
+            hit.Item.Checked = !hit.Item.Checked;
+        }
+
         // Bulk (re)checking - Fill() restoring N remembered checks, or ClearChecks unchecking N
         // rows - fires ItemChecked once per row regardless of BeginUpdate/EndUpdate (that only
         // suspends painting, not events). Without suppression, each of those N events would call
@@ -222,11 +257,11 @@ namespace BuMatrixSecurityRoleAssigner
         // "what you see" - GridSort only ever reads cell text - so one code path sorts both grids
         // regardless of what their rows are made of.
         //
-        // Keyed off Checked, not Selected (issue #25): a plain row click only moves the
-        // highlight, so clicking elsewhere in the grid (or on another row) no longer silently
-        // drops rows out of - or adds rows into - the batch Add/Remove/Inspect act on. The
-        // checkbox is the only thing that does that, and it can be cleared per-row or via the
-        // "Deselect All" button.
+        // Keyed off Checked, not Selected (issue #25): the row highlight never decides the batch,
+        // so clicking elsewhere in the grid (or on another row) no longer silently drops rows out
+        // of - or adds rows into - the batch Add/Remove/Inspect act on. Only the checkbox does
+        // that; a click anywhere on a row toggles it (see ToggleRowUnderCursor), and checks are
+        // cleared per-row or via the "Deselect All" button.
         private static void CaptureSelection(ListView lv, SelectionMemory<object> selection)
         {
             selection.Capture(
