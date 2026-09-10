@@ -25,6 +25,7 @@ namespace BuMatrixSecurityRoleAssigner
         private ToolStripSeparator tssInspect;
         private ToolStripButton tsbInspect;
         private ToolStripSeparator tssClearTargets;
+        private ToolStripButton tsbSelectTargets;
         private ToolStripButton tsbClearTargets;
 
         // Mirrors modeStrip above the Roles list, so both grid headers sit at the same height
@@ -33,6 +34,7 @@ namespace BuMatrixSecurityRoleAssigner
         private ToolStrip modeStripRoles;
         private ToolStripLabel lblBuModeIndicator;
         private ToolStripSeparator tssClearRoles;
+        private ToolStripButton tsbSelectRoles;
         private ToolStripButton tsbClearRoles;
 
         private TableLayoutPanel mainTable;
@@ -67,11 +69,13 @@ namespace BuMatrixSecurityRoleAssigner
             this.tssInspect = new ToolStripSeparator();
             this.tsbInspect = new ToolStripButton();
             this.tssClearTargets = new ToolStripSeparator();
+            this.tsbSelectTargets = new ToolStripButton();
             this.tsbClearTargets = new ToolStripButton();
 
             this.modeStripRoles = new ToolStrip();
             this.lblBuModeIndicator = new ToolStripLabel();
             this.tssClearRoles = new ToolStripSeparator();
+            this.tsbSelectRoles = new ToolStripButton();
             this.tsbClearRoles = new ToolStripButton();
 
             this.mainTable = new TableLayoutPanel();
@@ -131,15 +135,28 @@ namespace BuMatrixSecurityRoleAssigner
             // act on - the row highlight doesn't (issue #25). A single click anywhere on a row
             // toggles its checkbox; this button clears every checkbox in one go, since there is
             // otherwise no way to empty a multi-selection without re-clicking each row.
+            this.tsbSelectTargets.Text = "Select All";
+            this.tsbSelectTargets.Image = CreateSelectAllIcon();
+            this.tsbSelectTargets.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
+            this.tsbSelectTargets.ToolTipText =
+                "Check every row currently shown in this list.\r\n" +
+                "Rows hidden by the filter box are left as they are.";
+            this.tsbSelectTargets.Click += new System.EventHandler(this.tsbSelectTargets_Click);
+
             this.tsbClearTargets.Text = "Deselect All";
             this.tsbClearTargets.Image = CreateClearIcon();
             this.tsbClearTargets.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
-            this.tsbClearTargets.ToolTipText = "Uncheck every row in this list.";
+            // Deliberately not the mirror image of Select All: clearing reaches the rows the
+            // filter is hiding too, because dropping rows from a pending batch is the safe
+            // direction to be generous in.
+            this.tsbClearTargets.ToolTipText =
+                "Uncheck every row in this list, including rows hidden by the filter box.";
             this.tsbClearTargets.Click += new System.EventHandler(this.tsbClearTargets_Click);
 
             this.modeStrip.Items.AddRange(new ToolStripItem[]
             {
-                this.tsbUsersMode, this.tssInspect, this.tsbInspect, this.tssClearTargets, this.tsbClearTargets
+                this.tsbUsersMode, this.tssInspect, this.tsbInspect, this.tssClearTargets,
+                this.tsbSelectTargets, this.tsbClearTargets
             });
             this.modeStrip.Dock = DockStyle.Top;
             this.modeStrip.GripStyle = ToolStripGripStyle.Hidden;
@@ -155,15 +172,24 @@ namespace BuMatrixSecurityRoleAssigner
                 "Whether the connected environment uses Modernized (matrix) business units or Classic " +
                 "business units. Auto-detected on Load / Refresh - not a manual setting.";
 
+            this.tsbSelectRoles.Text = "Select All";
+            this.tsbSelectRoles.Image = CreateSelectAllIcon();
+            this.tsbSelectRoles.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
+            this.tsbSelectRoles.ToolTipText =
+                "Check every row currently shown in this list.\r\n" +
+                "Rows hidden by the filter box are left as they are.";
+            this.tsbSelectRoles.Click += new System.EventHandler(this.tsbSelectRoles_Click);
+
             this.tsbClearRoles.Text = "Deselect All";
             this.tsbClearRoles.Image = CreateClearIcon();
             this.tsbClearRoles.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
-            this.tsbClearRoles.ToolTipText = "Uncheck every row in this list.";
+            this.tsbClearRoles.ToolTipText =
+                "Uncheck every row in this list, including rows hidden by the filter box.";
             this.tsbClearRoles.Click += new System.EventHandler(this.tsbClearRoles_Click);
 
             this.modeStripRoles.Items.AddRange(new ToolStripItem[]
             {
-                this.lblBuModeIndicator, this.tssClearRoles, this.tsbClearRoles
+                this.lblBuModeIndicator, this.tssClearRoles, this.tsbSelectRoles, this.tsbClearRoles
             });
             this.modeStripRoles.Dock = DockStyle.Top;
             this.modeStripRoles.GripStyle = ToolStripGripStyle.Hidden;
@@ -458,6 +484,27 @@ namespace BuMatrixSecurityRoleAssigner
                 {
                     g.DrawEllipse(pen, 3f, 3f, 6.5f, 6.5f);
                     g.DrawLine(pen, 9.0f, 9.0f, 12.5f, 12.5f);
+                }
+            }
+            return bmp;
+        }
+
+        // Circular check glyph for the Select All buttons - the counterpart to the "X" below.
+        internal static Image CreateSelectAllIcon()
+        {
+            var bmp = new Bitmap(16, 16);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var brush = new SolidBrush(Color.FromArgb(40, 140, 70)))
+                    g.FillEllipse(brush, 0, 0, 16, 16);
+
+                using (var pen = new Pen(Color.White, 1.8f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                {
+                    g.DrawLine(pen, 4.0f, 8.3f, 6.9f, 11.2f);
+                    g.DrawLine(pen, 6.9f, 11.2f, 12.0f, 5.2f);
                 }
             }
             return bmp;

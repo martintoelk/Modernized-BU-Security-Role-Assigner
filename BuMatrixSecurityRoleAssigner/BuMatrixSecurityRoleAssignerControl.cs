@@ -61,9 +61,39 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void tsbInspect_Click(object sender, EventArgs e) => OpenInInspector();
 
+        private void tsbSelectTargets_Click(object sender, EventArgs e) => CheckAllShown(lvTeams);
+
+        private void tsbSelectRoles_Click(object sender, EventArgs e) => CheckAllShown(lvRoles);
+
         private void tsbClearTargets_Click(object sender, EventArgs e) => ClearChecks(lvTeams, _targetSelection);
 
         private void tsbClearRoles_Click(object sender, EventArgs e) => ClearChecks(lvRoles, _roleSelection);
+
+        // Checks every row the grid is currently showing - not every row loaded. Rows the filter
+        // box is hiding keep whatever state they had, so "Select All" on a filtered list can't
+        // quietly enlist rows the user can't see into an Add/Remove batch (the batch is built
+        // from SelectionMemory, which spans hidden rows - see GetSelectedTargets). ClearChecks is
+        // the deliberate asymmetry: clearing does reach the hidden rows, because dropping rows
+        // from a pending batch is the safe direction to be generous in.
+        //
+        // No SelectionMemory write here: the memory is synchronised from the visible grid by
+        // CaptureSelection on the next repopulation or read, which picks these checks up.
+        private void CheckAllShown(ListView lv)
+        {
+            lv.BeginUpdate();
+            _suppressCheckedEvents = true;
+            try
+            {
+                foreach (ListViewItem item in lv.Items)
+                    item.Checked = true;
+            }
+            finally
+            {
+                _suppressCheckedEvents = false;
+            }
+            lv.EndUpdate();
+            UpdateStatus();
+        }
 
         // Checkboxes, not row highlight, are what Add/Remove/Inspect act on (issue #25); this is
         // the only way to empty a multi-selection short of re-clicking every checked row.
