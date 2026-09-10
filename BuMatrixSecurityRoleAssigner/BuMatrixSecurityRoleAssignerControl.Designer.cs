@@ -24,12 +24,16 @@ namespace BuMatrixSecurityRoleAssigner
         private ToolStripButton tsbUsersMode;
         private ToolStripSeparator tssInspect;
         private ToolStripButton tsbInspect;
+        private ToolStripSeparator tssClearTargets;
+        private ToolStripButton tsbClearTargets;
 
         // Mirrors modeStrip above the Roles list, so both grid headers sit at the same height
         // instead of the roles side floating higher once the mode strip appears on the other
         // side. Read-only (no toggle - the BU mode is auto-detected, not user-chosen).
         private ToolStrip modeStripRoles;
         private ToolStripLabel lblBuModeIndicator;
+        private ToolStripSeparator tssClearRoles;
+        private ToolStripButton tsbClearRoles;
 
         private TableLayoutPanel mainTable;
 
@@ -62,9 +66,13 @@ namespace BuMatrixSecurityRoleAssigner
             this.tsbUsersMode = new ToolStripButton();
             this.tssInspect = new ToolStripSeparator();
             this.tsbInspect = new ToolStripButton();
+            this.tssClearTargets = new ToolStripSeparator();
+            this.tsbClearTargets = new ToolStripButton();
 
             this.modeStripRoles = new ToolStrip();
             this.lblBuModeIndicator = new ToolStripLabel();
+            this.tssClearRoles = new ToolStripSeparator();
+            this.tsbClearRoles = new ToolStripButton();
 
             this.mainTable = new TableLayoutPanel();
 
@@ -119,9 +127,19 @@ namespace BuMatrixSecurityRoleAssigner
                 "and reports it if the tool isn't installed.";
             this.tsbInspect.Click += new System.EventHandler(this.tsbInspect_Click);
 
+            // Checkboxes (below) are the only thing that decides which rows Add/Remove/Inspect
+            // act on - plain row clicks just move the highlight, they no longer add/remove a row
+            // from the batch (issue #25). This button clears every checkbox in one click, since
+            // there was previously no way to empty a multi-selection without re-clicking each row.
+            this.tsbClearTargets.Text = "Deselect All";
+            this.tsbClearTargets.Image = CreateClearIcon();
+            this.tsbClearTargets.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
+            this.tsbClearTargets.ToolTipText = "Uncheck every row in this list.";
+            this.tsbClearTargets.Click += new System.EventHandler(this.tsbClearTargets_Click);
+
             this.modeStrip.Items.AddRange(new ToolStripItem[]
             {
-                this.tsbUsersMode, this.tssInspect, this.tsbInspect
+                this.tsbUsersMode, this.tssInspect, this.tsbInspect, this.tssClearTargets, this.tsbClearTargets
             });
             this.modeStrip.Dock = DockStyle.Top;
             this.modeStrip.GripStyle = ToolStripGripStyle.Hidden;
@@ -137,7 +155,16 @@ namespace BuMatrixSecurityRoleAssigner
                 "Whether the connected environment uses Modernized (matrix) business units or Classic " +
                 "business units. Auto-detected on Load / Refresh - not a manual setting.";
 
-            this.modeStripRoles.Items.Add(this.lblBuModeIndicator);
+            this.tsbClearRoles.Text = "Deselect All";
+            this.tsbClearRoles.Image = CreateClearIcon();
+            this.tsbClearRoles.DisplayStyle = ToolStripItemDisplayStyle.ImageAndText;
+            this.tsbClearRoles.ToolTipText = "Uncheck every row in this list.";
+            this.tsbClearRoles.Click += new System.EventHandler(this.tsbClearRoles_Click);
+
+            this.modeStripRoles.Items.AddRange(new ToolStripItem[]
+            {
+                this.lblBuModeIndicator, this.tssClearRoles, this.tsbClearRoles
+            });
             this.modeStripRoles.Dock = DockStyle.Top;
             this.modeStripRoles.GripStyle = ToolStripGripStyle.Hidden;
 
@@ -206,11 +233,18 @@ namespace BuMatrixSecurityRoleAssigner
             this.lvRoles.FullRowSelect = true;
             this.lvRoles.MultiSelect = true;
             this.lvRoles.HideSelection = false;
+            // Checkboxes, not row highlight, are what Add/Remove/Inspect act on (issue #25) - a
+            // plain click just moves the highlight and no longer changes the batch, so a click
+            // elsewhere can no longer silently wipe out a multi-selection.
+            this.lvRoles.CheckBoxes = true;
             this.lvRoles.Columns.Add("Security Role", 240);
             this.lvRoles.Columns.Add("Business Unit", 200);
             // Click-to-sort (issue #23). Sorting is done on repopulation rather than via
             // ListView.ListViewItemSorter, so it survives the filter box rebuilding the list.
             this.lvRoles.ColumnClick += new ColumnClickEventHandler(this.lvRoles_ColumnClick);
+            // Keeps the status bar's "N checked" count live as boxes are ticked, not just on the
+            // next repopulation.
+            this.lvRoles.ItemChecked += new ItemCheckedEventHandler(this.lvRoles_ItemChecked);
 
             var rolesPanel = new Panel { Dock = DockStyle.Fill };
             // NOTE: add order = docked controls draw top-most last, so add Fill first, then the Top items.
@@ -272,10 +306,12 @@ namespace BuMatrixSecurityRoleAssigner
             this.lvTeams.FullRowSelect = true;
             this.lvTeams.MultiSelect = true;
             this.lvTeams.HideSelection = false;
+            this.lvTeams.CheckBoxes = true;
             this.lvTeams.Columns.Add("Team", 220);
             this.lvTeams.Columns.Add("Business Unit", 180);
             this.lvTeams.Columns.Add("Type", 130);
             this.lvTeams.ColumnClick += new ColumnClickEventHandler(this.lvTeams_ColumnClick);
+            this.lvTeams.ItemChecked += new ItemCheckedEventHandler(this.lvTeams_ItemChecked);
 
             var teamsPanel = new Panel { Dock = DockStyle.Fill };
             teamsPanel.Controls.Add(this.lvTeams);
@@ -415,6 +451,27 @@ namespace BuMatrixSecurityRoleAssigner
                 {
                     g.DrawEllipse(pen, 3f, 3f, 6.5f, 6.5f);
                     g.DrawLine(pen, 9.0f, 9.0f, 12.5f, 12.5f);
+                }
+            }
+            return bmp;
+        }
+
+        // Circular "X" glyph for the Deselect All buttons, matching the other toolbar badges.
+        internal static Image CreateClearIcon()
+        {
+            var bmp = new Bitmap(16, 16);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
+
+                using (var brush = new SolidBrush(Color.FromArgb(120, 120, 120)))
+                    g.FillEllipse(brush, 0, 0, 16, 16);
+
+                using (var pen = new Pen(Color.White, 1.8f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                {
+                    g.DrawLine(pen, 4.5f, 4.5f, 11.5f, 11.5f);
+                    g.DrawLine(pen, 11.5f, 4.5f, 4.5f, 11.5f);
                 }
             }
             return bmp;

@@ -61,6 +61,30 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void tsbInspect_Click(object sender, EventArgs e) => OpenInInspector();
 
+        private void tsbClearTargets_Click(object sender, EventArgs e) => ClearChecks(lvTeams, _targetSelection);
+
+        private void tsbClearRoles_Click(object sender, EventArgs e) => ClearChecks(lvRoles, _roleSelection);
+
+        // Checkboxes, not row highlight, are what Add/Remove/Inspect act on (issue #25); this is
+        // the only way to empty a multi-selection short of re-clicking every checked row.
+        private void ClearChecks(ListView lv, SelectionMemory<object> selection)
+        {
+            selection.Clear();
+            lv.BeginUpdate();
+            _suppressCheckedEvents = true;
+            try
+            {
+                foreach (ListViewItem item in lv.Items)
+                    item.Checked = false;
+            }
+            finally
+            {
+                _suppressCheckedEvents = false;
+            }
+            lv.EndUpdate();
+            UpdateStatus();
+        }
+
         private void lvTeams_ColumnClick(object sender, ColumnClickEventArgs e)
         {
             _targetSort.HeaderClicked(e.Column);
@@ -74,6 +98,24 @@ namespace BuMatrixSecurityRoleAssigner
         }
 
         private void txtTeamFilter_TextChanged(object sender, EventArgs e) => PopulateTargetList();
+
+        // Bulk (re)checking - Fill() restoring N remembered checks, or ClearChecks unchecking N
+        // rows - fires ItemChecked once per row regardless of BeginUpdate/EndUpdate (that only
+        // suspends painting, not events). Without suppression, each of those N events would call
+        // UpdateStatus(), which itself walks both ListViews' CheckedItems - turning an O(n)
+        // repopulation into O(n*k) on a large, mostly-checked org. Suppressed here and reduced to
+        // one UpdateStatus() call by the bulk operation itself.
+        private bool _suppressCheckedEvents;
+
+        private void lvTeams_ItemChecked(object sender, ItemCheckedEventArgs e)
+        {
+            if (!_suppressCheckedEvents) UpdateStatus();
+        }
+
+        private void lvRoles_ItemChecked(object sender, ItemCheckedEventArgs e)
+        {
+            if (!_suppressCheckedEvents) UpdateStatus();
+        }
 
         private void tsbUsersMode_CheckedChanged(object sender, EventArgs e)
         {
@@ -179,45 +221,55 @@ namespace BuMatrixSecurityRoleAssigner
         // Sorting the built rows (rather than the model lists) keeps "what you sort" identical to
         // "what you see" - GridSort only ever reads cell text - so one code path sorts both grids
         // regardless of what their rows are made of.
+        //
+        // Keyed off Checked, not Selected (issue #25): a plain row click only moves the
+        // highlight, so clicking elsewhere in the grid (or on another row) no longer silently
+        // drops rows out of - or adds rows into - the batch Add/Remove/Inspect act on. The
+        // checkbox is the only thing that does that, and it can be cleared per-row or via the
+        // "Deselect All" button.
         private static void CaptureSelection(ListView lv, SelectionMemory<object> selection)
         {
             selection.Capture(
                 lv.Items.Cast<ListViewItem>().Select(item => item.Tag),
-                lv.SelectedItems.Cast<ListViewItem>().Select(item => item.Tag));
+                lv.CheckedItems.Cast<ListViewItem>().Select(item => item.Tag));
         }
 
-        private static void Fill(ListView lv, IEnumerable<ListViewItem> rows, GridSort sort,
+        private void Fill(ListView lv, IEnumerable<ListViewItem> rows, GridSort sort,
             SelectionMemory<object> selection)
         {
             lv.BeginUpdate();
             lv.Items.Clear();
             lv.Items.AddRange(sort.Apply(rows, (r, column) => r.SubItems[column].Text).ToArray());
 
-            // Fresh items come in unselected, and each assignment is a separate native
-            // item-state call - on a large org that would otherwise cost thousands of them per
-            // filter keystroke. SelectionMemory remembers rows hidden by the current filter too.
-            ListViewItem anchor = null;
-            foreach (ListViewItem item in lv.Items)
+            // Fresh items come in unchecked, and each assignment is a separate native item-state
+            // call - on a large org that would otherwise cost thousands of them per filter
+            // keystroke. SelectionMemory remembers rows hidden by the current filter too.
+            // Checked-event suppression avoids each of those calls re-walking both grids'
+            // CheckedItems via UpdateStatus (see _suppressCheckedEvents).
+            ListViewItem firstChecked = null;
+            _suppressCheckedEvents = true;
+            try
             {
-                if (!selection.Contains(item.Tag)) continue;
-                item.Selected = true;
-                if (anchor == null) anchor = item;
+                foreach (ListViewItem item in lv.Items)
+                {
+                    if (!selection.Contains(item.Tag)) continue;
+                    item.Checked = true;
+                    if (firstChecked == null) firstChecked = item;
+                }
+            }
+            finally
+            {
+                _suppressCheckedEvents = false;
             }
 
             for (var i = 0; i < lv.Columns.Count; i++)
                 lv.Columns[i].Text = sort.DecorateHeader(lv.Columns[i].Text, i);
             lv.EndUpdate();
 
-            // A restored selection with no focused item leaves the shift-click anchor at index 0,
-            // so the next shift-click would extend from the top of the list instead of from what
-            // the user has selected - silently widening the batch. Scrolling to it also keeps the
-            // selection in view when the sort moved it far down. Done after EndUpdate, since
-            // EnsureVisible can't scroll a list whose painting is still suspended.
-            if (anchor != null)
-            {
-                anchor.Focused = true;
-                anchor.EnsureVisible();
-            }
+            // Keeps a restored check in view when the sort moved it far down. Done after
+            // EndUpdate, since EnsureVisible can't scroll a list whose painting is still
+            // suspended.
+            firstChecked?.EnsureVisible();
         }
 
         // Drives the read-only mode indicator above the roles grid (mirrors the Teams/Users
@@ -290,8 +342,8 @@ namespace BuMatrixSecurityRoleAssigner
             var roleTotal = CollapseRolesByRootRole
                 ? _allRoles.Select(r => r.RootRoleId).Distinct().Count()
                 : _allRoles.Count;
-            lblStatus.Text = $"{targetLabel}: {lvTeams.Items.Count} shown ({targetTotal} total)   |   " +
-                             $"Roles: {lvRoles.Items.Count} shown ({roleTotal} total)";
+            lblStatus.Text = $"{targetLabel}: {lvTeams.Items.Count} shown ({targetTotal} total, {lvTeams.CheckedItems.Count} checked)   |   " +
+                             $"Roles: {lvRoles.Items.Count} shown ({roleTotal} total, {lvRoles.CheckedItems.Count} checked)";
         }
 
         private List<IAssignmentTarget> GetSelectedTargets()
