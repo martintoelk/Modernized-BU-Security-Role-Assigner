@@ -34,7 +34,16 @@ namespace BuMatrixSecurityRoleAssigner.Core
             _service = service ?? throw new ArgumentNullException(nameof(service));
         }
 
-        public List<TeamItem> RetrieveTeams(bool ignorePowerVirtualAgentTeams = true)
+        /// <summary>
+        /// Retrieves the teams that can hold security roles.
+        /// <para>
+        /// <paramref name="progress"/>, when supplied, is called once per retrieved page with the
+        /// running record count. A tenant with six figures of rows is tens of round trips at
+        /// 5,000 a page, which is minutes of a progress dialog that would otherwise say nothing
+        /// at all and read as a hang.
+        /// </para>
+        /// </summary>
+        public List<TeamItem> RetrieveTeams(bool ignorePowerVirtualAgentTeams = true, Action<int> progress = null)
         {
             var query = new QueryExpression(Team.EntityLogicalName)
             {
@@ -85,6 +94,7 @@ namespace BuMatrixSecurityRoleAssigner.Core
                             : string.Empty
                     });
                 }
+                progress?.Invoke(list.Count);
                 query.PageInfo.PageNumber++;
                 query.PageInfo.PagingCookie = ec.PagingCookie;
             }
@@ -97,8 +107,10 @@ namespace BuMatrixSecurityRoleAssigner.Core
         /// Users mode: analogous to <see cref="RetrieveTeams"/>. Disabled users are included, not
         /// excluded - flagged via <see cref="UserItem.IsDisabled"/> so the caller can warn rather
         /// than silently letting a role get assigned to a disabled account.
+        /// <paramref name="progress"/> reports the running record count per page, as in
+        /// <see cref="RetrieveTeams"/> - this is the load that gets long on a large tenant.
         /// </summary>
-        public List<UserItem> RetrieveUsers()
+        public List<UserItem> RetrieveUsers(Action<int> progress = null)
         {
             var query = new QueryExpression(SystemUser.EntityLogicalName)
             {
@@ -124,6 +136,7 @@ namespace BuMatrixSecurityRoleAssigner.Core
                         IsDisabled = u.IsDisabled ?? false
                     });
                 }
+                progress?.Invoke(list.Count);
                 query.PageInfo.PageNumber++;
                 query.PageInfo.PagingCookie = ec.PagingCookie;
             }
@@ -132,7 +145,11 @@ namespace BuMatrixSecurityRoleAssigner.Core
             return list;
         }
 
-        public List<RoleItem> RetrieveRoles()
+        /// <summary>
+        /// All security roles, one row per business-unit copy. <paramref name="progress"/> reports
+        /// the running record count per page, as in <see cref="RetrieveTeams"/>.
+        /// </summary>
+        public List<RoleItem> RetrieveRoles(Action<int> progress = null)
         {
             var query = new QueryExpression(Role.EntityLogicalName)
             {
@@ -160,6 +177,7 @@ namespace BuMatrixSecurityRoleAssigner.Core
                         RootRoleId = root?.Id ?? r.Id
                     });
                 }
+                progress?.Invoke(list.Count);
                 query.PageInfo.PageNumber++;
                 query.PageInfo.PagingCookie = ec.PagingCookie;
             }

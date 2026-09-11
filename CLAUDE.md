@@ -32,7 +32,8 @@ the package version. Smoke-tested against a live dev org — successful.
 | `BuMatrixSecurityRoleAssigner.Core/Models.cs` | `TeamItem`, `UserItem` (both implement `IAssignmentTarget`), `RoleItem`, `OperationLog` |
 | `BuMatrixSecurityRoleAssigner.Core/GridSort.cs` | Click-to-sort state + ordering for the two grids; pure, no WinForms types |
 | `BuMatrixSecurityRoleAssigner.Core/RoleHandoff.cs` | Wire format for the message-bus handoff to "User/Team Role Inspector"; string in, string out, no WinForms/XTB types |
-| `BuMatrixSecurityRoleAssigner.Core/SelectionMemory.cs` | Filter-safe selection state for rebuilt grids |
+| `BuMatrixSecurityRoleAssigner.Core/SelectionMemory.cs` | The checked-rows store, by model identity — the single source of truth for both grids |
+| `BuMatrixSecurityRoleAssigner/VirtualGrid.cs` | Binds one virtual-mode `ListView` to rows + `SelectionMemory`; owns checking, click-to-toggle and sorting on repopulation |
 | `BuMatrixSecurityRoleAssigner.Core/Generated/Entities/*.cs` | Early-bound Dataverse entity classes (`Team`, `Role`, `TeamRoles`, `SystemUser`, `SystemUserRoles`, `BusinessUnit`) — **generated, don't hand-edit**. Regenerate with `pac modelbuilder build --entitynamesfilter "team;role;systemuser;businessunit;teamroles;systemuserroles" --outdirectory "BuMatrixSecurityRoleAssigner.Core/Generated" --namespace "BuMatrixSecurityRoleAssigner.Core.Entities" --emitfieldsclasses` |
 | `BuMatrixSecurityRoleAssigner.Core/BuMatrixSecurityRoleAssigner.Core.csproj` | SDK-style class library (net48) |
 | `BuMatrixSecurityRoleAssigner.Core.Tests/` | xUnit test project + hand-rolled `FakeOrganizationService` double — no live org needed |
@@ -68,14 +69,30 @@ the package version. Smoke-tested against a live dev org — successful.
 - **Remove from all BUs.** Remove-only opt-in (`chkRemoveAllBus`, default off): normal remove
   only touches the exact role/BU pair(s) selected; checked, it widens each selection to every BU
   copy of that logical role (via `RootRoleId`) currently assigned to the selected targets.
+- **Virtual-mode grids.** Both `ListView`s run in `VirtualMode` behind `VirtualGrid`: the control
+  holds no rows and no check state, rows come from `RetrieveVirtualItem`, and checks live in
+  `SelectionMemory` keyed by model - the same store Add/Remove/Inspect read. A classic ListView
+  cost ~13 s per filter keystroke and ~0.3 s per checkbox click on a 30k-user tenant (all of it
+  native item traffic, scaling with rows loaded, not rows on screen); virtual mode is ~20 ms and
+  flat. `CheckedItems`/`CheckedIndices` throw in virtual mode, `Items` can't be enumerated, and
+  `ItemCheck`/`ItemChecked` never fire - so clicking, Space and Select All/Deselect All are all
+  driven from `VirtualGrid`, and a glyph click is toggled there rather than by the control. Read
+  `docs/research/large-tenant-grid-performance.md` before touching that file.
 - **Click-to-sort grids.** Both lists sort on a column-header click (`GridSort` in Core -
   pure, unit-tested, no WinForms types). Sorting is applied when the list is repopulated
-  rather than through `ListView.ListViewItemSorter`, so it survives the filter boxes
-  rebuilding the list; `SelectionMemory` carries the multi-selection across a repopulation by
-  model identity, including rows temporarily hidden by a filter. Ties break on the name column so
+  (`VirtualGrid.Show`) rather than through `ListView.ListViewItemSorter`, so it survives the
+  filter boxes rebuilding the list; checks are by model identity, so they survive a sort, a
+  filter that hides the row, and the Teams/Users toggle. Ties break on the name column so
   a coarse sort (BU, team type) groups rows without
   scrambling names inside a group. No sort is imposed until a header is clicked - the service's
   own default order stands.
+- **Status line = batch size.** "N checked" is counted through the same `GetSelectedTargets`/
+  `GetSelectedRoles` the operation uses, so it includes rows the filter hides and excludes the
+  mode that isn't showing - the number always matches what the confirmation dialog will quote.
+- **Paged loads report progress.** `RetrieveTeams`/`RetrieveUsers`/`RetrieveRoles` take an
+  optional `progress` callback, fired once per 5,000-row page with the running count, so a
+  six-figure tenant's multi-minute load doesn't sit behind a fixed "Loading..." that reads as a
+  hang.
 - **Role Inspector handoff (#17).** The control implements XrmToolBox's `IMessageBusHost`, and
   the **Inspect in Role Inspector** button raises `OnOutgoingMessage` targeting
   `"User/Team Role Inspector"` (matched by the host against that tool's MEF `ExportMetadata`

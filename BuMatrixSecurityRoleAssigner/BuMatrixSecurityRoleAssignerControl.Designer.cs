@@ -268,14 +268,9 @@ namespace BuMatrixSecurityRoleAssigner
             // Click-to-sort (issue #23). Sorting is done on repopulation rather than via
             // ListView.ListViewItemSorter, so it survives the filter box rebuilding the list.
             this.lvRoles.ColumnClick += new ColumnClickEventHandler(this.lvRoles_ColumnClick);
-            // Keeps the status bar's "N checked" count live as boxes are ticked, not just on the
-            // next repopulation.
-            this.lvRoles.ItemChecked += new ItemCheckedEventHandler(this.lvRoles_ItemChecked);
-            // A single click anywhere on a row (un)checks it - the native control otherwise only
-            // toggles on the checkbox glyph itself or on a double-click. MouseDoubleClick is
-            // wired to keep a double-click worth one toggle; see ToggleRowUnderCursor.
-            this.lvRoles.MouseClick += new MouseEventHandler(this.lvRoles_MouseClick);
-            this.lvRoles.MouseDoubleClick += new MouseEventHandler(this.lvRoles_MouseDoubleClick);
+            // Rows, checks and the click-to-toggle behaviour are VirtualGrid's from here on (the
+            // control itself is switched into VirtualMode there): on a large tenant a ListView
+            // that owns its rows costs seconds per filter keystroke.
 
             var rolesPanel = new Panel { Dock = DockStyle.Fill };
             // NOTE: add order = docked controls draw top-most last, so add Fill first, then the Top items.
@@ -342,9 +337,8 @@ namespace BuMatrixSecurityRoleAssigner
             this.lvTeams.Columns.Add("Business Unit", 180);
             this.lvTeams.Columns.Add("Type", 130);
             this.lvTeams.ColumnClick += new ColumnClickEventHandler(this.lvTeams_ColumnClick);
-            this.lvTeams.ItemChecked += new ItemCheckedEventHandler(this.lvTeams_ItemChecked);
-            this.lvTeams.MouseClick += new MouseEventHandler(this.lvTeams_MouseClick);
-            this.lvTeams.MouseDoubleClick += new MouseEventHandler(this.lvTeams_MouseDoubleClick);
+            // Rows, checks and click-to-toggle: see the same note on lvRoles above - VirtualGrid
+            // owns them, and switches this control into VirtualMode.
 
             var teamsPanel = new Panel { Dock = DockStyle.Fill };
             teamsPanel.Controls.Add(this.lvTeams);

@@ -67,6 +67,51 @@ namespace BuMatrixSecurityRoleAssigner.Core.Tests
         }
 
         [Fact]
+        public void RetrieveUsers_ReportsTheRunningCountOncePerPage()
+        {
+            // A large tenant is tens of 5,000-row round trips, and a load that reports nothing
+            // for minutes is indistinguishable from a hang. One report per page, cumulative.
+            var fake = new FakeOrganizationService();
+            for (var i = 0; i < 10001; i++)
+                fake.SeedUser(Guid.NewGuid(), $"User {i:D5}", RootBuId, "Root BU");
+            var sut = new TeamRoleAssignmentService(fake);
+            var reported = new List<int>();
+
+            var users = sut.RetrieveUsers(progress: reported.Add);
+
+            Assert.Equal(10001, users.Count);
+            Assert.Equal(new[] { 5000, 10000, 10001 }, reported.ToArray());
+        }
+
+        [Fact]
+        public void RetrieveTeams_ReportsProgress_AndIsOptional()
+        {
+            var fake = new FakeOrganizationService();
+            fake.SeedTeam(Guid.NewGuid(), "Sales Team", RootBuId, "Root BU", "Owner");
+            var sut = new TeamRoleAssignmentService(fake);
+            var reported = new List<int>();
+
+            Assert.Single(sut.RetrieveTeams());  // no callback: still loads
+            sut.RetrieveTeams(progress: reported.Add);
+
+            Assert.Equal(new[] { 1 }, reported.ToArray());
+        }
+
+        [Fact]
+        public void RetrieveRoles_ReportsProgress()
+        {
+            var fake = new FakeOrganizationService();
+            fake.SeedRole(Guid.NewGuid(), "Salesperson", RootBuId, "Root BU");
+            fake.SeedRole(Guid.NewGuid(), "Sales Manager", RootBuId, "Root BU");
+            var sut = new TeamRoleAssignmentService(fake);
+            var reported = new List<int>();
+
+            sut.RetrieveRoles(progress: reported.Add);
+
+            Assert.Equal(new[] { 2 }, reported.ToArray());
+        }
+
+        [Fact]
         public void RetrieveRoles_FallsBackRootRoleIdToOwnId_WhenNoParentRoot()
         {
             var fake = new FakeOrganizationService();

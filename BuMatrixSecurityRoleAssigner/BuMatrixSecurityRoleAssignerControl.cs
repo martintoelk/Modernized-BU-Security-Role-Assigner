@@ -32,6 +32,12 @@ namespace BuMatrixSecurityRoleAssigner
         private readonly SelectionMemory<object> _targetSelection = new SelectionMemory<object>();
         private readonly SelectionMemory<object> _roleSelection = new SelectionMemory<object>();
 
+        // Both grids are virtual-mode ListViews driven from the caches above: the control holds
+        // no rows and no check state of its own, which is what keeps a filter keystroke or a
+        // "Select All" from costing one native call per row on a large tenant. See VirtualGrid.
+        private readonly VirtualGrid _targetGrid;
+        private readonly VirtualGrid _roleGrid;
+
         // Teams vs Users - never mixed. tsbUsersMode.Checked is the single source of truth; this
         // just makes call sites read as "which mode", not "which checkbox".
         private bool UsersMode => tsbUsersMode.Checked;
@@ -39,6 +45,13 @@ namespace BuMatrixSecurityRoleAssigner
         public BuMatrixSecurityRoleAssignerControl()
         {
             InitializeComponent();
+
+            _targetGrid = new VirtualGrid(lvTeams, _targetSort, _targetSelection);
+            _roleGrid = new VirtualGrid(lvRoles, _roleSort, _roleSelection);
+            // Checks no longer come back as per-row ItemChecked events (virtual mode raises
+            // none), so the status line is refreshed once per user action instead of once per row.
+            _targetGrid.CheckedChanged += (s, e) => UpdateStatus();
+            _roleGrid.CheckedChanged += (s, e) => UpdateStatus();
         }
 
         // ------------------------------------------------------------------ UI events
@@ -61,59 +74,17 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void tsbInspect_Click(object sender, EventArgs e) => OpenInInspector();
 
-        private void tsbSelectTargets_Click(object sender, EventArgs e) => CheckAllShown(lvTeams);
+        private void tsbSelectTargets_Click(object sender, EventArgs e) => _targetGrid.CheckAllShown();
 
-        private void tsbSelectRoles_Click(object sender, EventArgs e) => CheckAllShown(lvRoles);
+        private void tsbSelectRoles_Click(object sender, EventArgs e) => _roleGrid.CheckAllShown();
 
-        private void tsbClearTargets_Click(object sender, EventArgs e) => ClearChecks(lvTeams, _targetSelection);
+        // Checkboxes, not row highlight, are what Add/Remove/Inspect act on (issue #25); these are
+        // the only way to fill or empty a multi-selection short of clicking every row. What each
+        // one reaches - shown rows only for Select All, the hidden ones too for Deselect All -
+        // is VirtualGrid's call; see CheckAllShown/ClearChecks there.
+        private void tsbClearTargets_Click(object sender, EventArgs e) => _targetGrid.ClearChecks();
 
-        private void tsbClearRoles_Click(object sender, EventArgs e) => ClearChecks(lvRoles, _roleSelection);
-
-        // Checks every row the grid is currently showing - not every row loaded. Rows the filter
-        // box is hiding keep whatever state they had, so "Select All" on a filtered list can't
-        // quietly enlist rows the user can't see into an Add/Remove batch (the batch is built
-        // from SelectionMemory, which spans hidden rows - see GetSelectedTargets). ClearChecks is
-        // the deliberate asymmetry: clearing does reach the hidden rows, because dropping rows
-        // from a pending batch is the safe direction to be generous in.
-        //
-        // No SelectionMemory write here: the memory is synchronised from the visible grid by
-        // CaptureSelection on the next repopulation or read, which picks these checks up.
-        private void CheckAllShown(ListView lv)
-        {
-            lv.BeginUpdate();
-            _suppressCheckedEvents = true;
-            try
-            {
-                foreach (ListViewItem item in lv.Items)
-                    item.Checked = true;
-            }
-            finally
-            {
-                _suppressCheckedEvents = false;
-            }
-            lv.EndUpdate();
-            UpdateStatus();
-        }
-
-        // Checkboxes, not row highlight, are what Add/Remove/Inspect act on (issue #25); this is
-        // the only way to empty a multi-selection short of re-clicking every checked row.
-        private void ClearChecks(ListView lv, SelectionMemory<object> selection)
-        {
-            selection.Clear();
-            lv.BeginUpdate();
-            _suppressCheckedEvents = true;
-            try
-            {
-                foreach (ListViewItem item in lv.Items)
-                    item.Checked = false;
-            }
-            finally
-            {
-                _suppressCheckedEvents = false;
-            }
-            lv.EndUpdate();
-            UpdateStatus();
-        }
+        private void tsbClearRoles_Click(object sender, EventArgs e) => _roleGrid.ClearChecks();
 
         private void lvTeams_ColumnClick(object sender, ColumnClickEventArgs e)
         {
@@ -128,59 +99,6 @@ namespace BuMatrixSecurityRoleAssigner
         }
 
         private void txtTeamFilter_TextChanged(object sender, EventArgs e) => PopulateTargetList();
-
-        // A single left click anywhere on a row toggles that row's checkbox. Out of the box the
-        // native ListView only toggles on the checkbox glyph itself or on a double-click, which
-        // made assembling a batch a pixel-hunt down the left edge of the grid; since the checkbox
-        // is the only thing Add/Remove/Inspect act on (issue #25), the whole row is the natural
-        // hit target. FullRowSelect is on, so HitTest reports the row for a click in any column
-        // (verified: glyph -> StateImage, everywhere else across the row -> Label, past the last
-        // column or below the rows -> no item, which is left alone).
-        private void lvTeams_MouseClick(object sender, MouseEventArgs e) => ToggleRowUnderCursor(lvTeams, e, false);
-
-        private void lvRoles_MouseClick(object sender, MouseEventArgs e) => ToggleRowUnderCursor(lvRoles, e, false);
-
-        // The native control toggles the box on a double-click too, and that toggle lands between
-        // MouseClick and MouseDoubleClick - so on the second click the row has already flipped
-        // twice (once from our own MouseClick above, once natively) and is back where it started.
-        // Flipping once more here keeps a double-click worth exactly one toggle, like the single
-        // click it starts with, rather than silently doing nothing.
-        private void lvTeams_MouseDoubleClick(object sender, MouseEventArgs e) => ToggleRowUnderCursor(lvTeams, e, true);
-
-        private void lvRoles_MouseDoubleClick(object sender, MouseEventArgs e) => ToggleRowUnderCursor(lvRoles, e, true);
-
-        private static void ToggleRowUnderCursor(ListView lv, MouseEventArgs e, bool fromDoubleClick)
-        {
-            if (e.Button != MouseButtons.Left) return;
-
-            var hit = lv.HitTest(e.Location);
-            if (hit.Item == null) return;
-
-            // A click on the glyph was already toggled by the native control - toggling again
-            // would cancel it out. A double-click's native toggle is deliberately not skipped
-            // here; it's the one being compensated for.
-            if (!fromDoubleClick && hit.Location == ListViewHitTestLocations.StateImage) return;
-
-            hit.Item.Checked = !hit.Item.Checked;
-        }
-
-        // Bulk (re)checking - Fill() restoring N remembered checks, or ClearChecks unchecking N
-        // rows - fires ItemChecked once per row regardless of BeginUpdate/EndUpdate (that only
-        // suspends painting, not events). Without suppression, each of those N events would call
-        // UpdateStatus(), which itself walks both ListViews' CheckedItems - turning an O(n)
-        // repopulation into O(n*k) on a large, mostly-checked org. Suppressed here and reduced to
-        // one UpdateStatus() call by the bulk operation itself.
-        private bool _suppressCheckedEvents;
-
-        private void lvTeams_ItemChecked(object sender, ItemCheckedEventArgs e)
-        {
-            if (!_suppressCheckedEvents) UpdateStatus();
-        }
-
-        private void lvRoles_ItemChecked(object sender, ItemCheckedEventArgs e)
-        {
-            if (!_suppressCheckedEvents) UpdateStatus();
-        }
 
         private void tsbUsersMode_CheckedChanged(object sender, EventArgs e)
         {
@@ -209,9 +127,16 @@ namespace BuMatrixSecurityRoleAssigner
                 Work = (worker, args) =>
                 {
                     var service = new TeamRoleAssignmentService(Service);
-                    var teams = service.RetrieveTeams(ignorePowerVirtualAgentTeams);
-                    var users = service.RetrieveUsers();
-                    var roles = service.RetrieveRoles();
+                    // Each load pages 5,000 rows at a time, so a large tenant is tens of round
+                    // trips per entity - minutes in which a fixed "Loading..." says nothing and
+                    // reads as a hang. Report the running count instead.
+                    var teams = service.RetrieveTeams(ignorePowerVirtualAgentTeams,
+                        loaded => SetWorkingMessage($"Loading teams... {loaded:N0} so far"));
+                    var users = service.RetrieveUsers(
+                        loaded => SetWorkingMessage($"Loaded {teams.Count:N0} teams. Loading users... {loaded:N0} so far"));
+                    var roles = service.RetrieveRoles(
+                        loaded => SetWorkingMessage($"Loaded {teams.Count:N0} teams and {users.Count:N0} users. " +
+                                                    $"Loading security roles... {loaded:N0} so far"));
                     var modernizedBuStatus = service.GetModernizedBuStatus();
                     args.Result = Tuple.Create(teams, users, roles, modernizedBuStatus);
                 },
@@ -229,12 +154,11 @@ namespace BuMatrixSecurityRoleAssigner
                     _allUsers = result.Item2;
                     _allRoles = result.Item3;
                     _modernizedBuStatus = result.Item4;
-                    // Do not let Populate* capture selections from rows belonging to the old
-                    // cache before the selection memories are reset.
-                    lvTeams.Items.Clear();
-                    lvRoles.Items.Clear();
-                    _targetSelection.Clear();
-                    _roleSelection.Clear();
+                    // Checks are remembered by model identity, and a reload replaces every model
+                    // - so drop rows and checks together rather than leaving the memories holding
+                    // objects from the previous cache.
+                    _targetGrid.Reset();
+                    _roleGrid.Reset();
                     UpdateBuModeIndicator();
                     PopulateTargetList();
                     PopulateRoleList();
@@ -251,90 +175,29 @@ namespace BuMatrixSecurityRoleAssigner
                                    f.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0);
         }
 
+        // Sorting the built rows (rather than the model lists) keeps "what you sort" identical to
+        // "what you see" - GridSort only ever reads cell text - so one code path sorts both grids
+        // regardless of what their rows are made of. VirtualGrid.Show applies it.
         private void PopulateTargetList()
         {
-            CaptureSelection(lvTeams, _targetSelection);
             var filter = txtTeamFilter.Text?.Trim();
 
-            IEnumerable<ListViewItem> rows;
+            IEnumerable<GridRow> rows;
             if (UsersMode)
             {
                 rows = _allUsers
                     .Where(u => Match(filter, u.Name, u.BusinessUnitName))
-                    .Select(u => Row(u, u.Name, u.BusinessUnitName, u.IsDisabled ? "Yes" : ""));
+                    .Select(u => new GridRow(u, u.Name, u.BusinessUnitName, u.IsDisabled ? "Yes" : ""));
             }
             else
             {
                 rows = _allTeams
                     .Where(t => Match(filter, t.Name, t.BusinessUnitName))
-                    .Select(t => Row(t, t.Name, t.BusinessUnitName, t.TeamType));
+                    .Select(t => new GridRow(t, t.Name, t.BusinessUnitName, t.TeamType));
             }
 
-            Fill(lvTeams, rows, _targetSort, _targetSelection);
+            _targetGrid.Show(rows);
             UpdateStatus();
-        }
-
-        /// <summary>A grid row: the cell texts as shown, with the underlying model on the Tag.</summary>
-        private static ListViewItem Row(object model, params string[] cells)
-        {
-            var item = new ListViewItem(cells[0]) { Tag = model };
-            for (var i = 1; i < cells.Length; i++)
-                item.SubItems.Add(cells[i]);
-            return item;
-        }
-
-        // Sorting the built rows (rather than the model lists) keeps "what you sort" identical to
-        // "what you see" - GridSort only ever reads cell text - so one code path sorts both grids
-        // regardless of what their rows are made of.
-        //
-        // Keyed off Checked, not Selected (issue #25): the row highlight never decides the batch,
-        // so clicking elsewhere in the grid (or on another row) no longer silently drops rows out
-        // of - or adds rows into - the batch Add/Remove/Inspect act on. Only the checkbox does
-        // that; a click anywhere on a row toggles it (see ToggleRowUnderCursor), and checks are
-        // cleared per-row or via the "Deselect All" button.
-        private static void CaptureSelection(ListView lv, SelectionMemory<object> selection)
-        {
-            selection.Capture(
-                lv.Items.Cast<ListViewItem>().Select(item => item.Tag),
-                lv.CheckedItems.Cast<ListViewItem>().Select(item => item.Tag));
-        }
-
-        private void Fill(ListView lv, IEnumerable<ListViewItem> rows, GridSort sort,
-            SelectionMemory<object> selection)
-        {
-            lv.BeginUpdate();
-            lv.Items.Clear();
-            lv.Items.AddRange(sort.Apply(rows, (r, column) => r.SubItems[column].Text).ToArray());
-
-            // Fresh items come in unchecked, and each assignment is a separate native item-state
-            // call - on a large org that would otherwise cost thousands of them per filter
-            // keystroke. SelectionMemory remembers rows hidden by the current filter too.
-            // Checked-event suppression avoids each of those calls re-walking both grids'
-            // CheckedItems via UpdateStatus (see _suppressCheckedEvents).
-            ListViewItem firstChecked = null;
-            _suppressCheckedEvents = true;
-            try
-            {
-                foreach (ListViewItem item in lv.Items)
-                {
-                    if (!selection.Contains(item.Tag)) continue;
-                    item.Checked = true;
-                    if (firstChecked == null) firstChecked = item;
-                }
-            }
-            finally
-            {
-                _suppressCheckedEvents = false;
-            }
-
-            for (var i = 0; i < lv.Columns.Count; i++)
-                lv.Columns[i].Text = sort.DecorateHeader(lv.Columns[i].Text, i);
-            lv.EndUpdate();
-
-            // Keeps a restored check in view when the sort moved it far down. Done after
-            // EndUpdate, since EnsureVisible can't scroll a list whose painting is still
-            // suspended.
-            firstChecked?.EnsureVisible();
         }
 
         // Drives the read-only mode indicator above the roles grid (mirrors the Teams/Users
@@ -373,7 +236,6 @@ namespace BuMatrixSecurityRoleAssigner
 
         private void PopulateRoleList()
         {
-            CaptureSelection(lvRoles, _roleSelection);
             var filter = txtRoleFilter.Text?.Trim();
             var collapse = CollapseRolesByRootRole;
             if (_buColumnWidthSetForCollapse != collapse)
@@ -384,10 +246,9 @@ namespace BuMatrixSecurityRoleAssigner
 
             var roles = RolesForDisplay(collapse);
 
-            Fill(lvRoles,
-                 roles.Where(r => Match(filter, r.Name, collapse ? null : r.BusinessUnitName))
-                      .Select(r => Row(r, r.Name, collapse ? "" : r.BusinessUnitName)),
-                 _roleSort, _roleSelection);
+            _roleGrid.Show(
+                roles.Where(r => Match(filter, r.Name, collapse ? null : r.BusinessUnitName))
+                     .Select(r => new GridRow(r, r.Name, collapse ? "" : r.BusinessUnitName)));
             UpdateStatus();
         }
 
@@ -407,13 +268,17 @@ namespace BuMatrixSecurityRoleAssigner
             var roleTotal = CollapseRolesByRootRole
                 ? _allRoles.Select(r => r.RootRoleId).Distinct().Count()
                 : _allRoles.Count;
-            lblStatus.Text = $"{targetLabel}: {lvTeams.Items.Count} shown ({targetTotal} total, {lvTeams.CheckedItems.Count} checked)   |   " +
-                             $"Roles: {lvRoles.Items.Count} shown ({roleTotal} total, {lvRoles.CheckedItems.Count} checked)";
+            // Counted through the same accessors Add/Remove use, so "N checked" is exactly the
+            // batch size the confirmation dialog will quote. That means it counts rows the filter
+            // box is hiding (they stay in the batch), and it does not count rows belonging to the
+            // mode that isn't showing - the target memory spans Teams and Users, but one run only
+            // ever acts on one of them.
+            lblStatus.Text = $"{targetLabel}: {_targetGrid.ShownCount} shown ({targetTotal} total, {GetSelectedTargets().Count} checked)   |   " +
+                             $"Roles: {_roleGrid.ShownCount} shown ({roleTotal} total, {GetSelectedRoles().Count} checked)";
         }
 
         private List<IAssignmentTarget> GetSelectedTargets()
         {
-            CaptureSelection(lvTeams, _targetSelection);
             var targets = UsersMode
                 ? _allUsers.Cast<IAssignmentTarget>()
                 : _allTeams.Cast<IAssignmentTarget>();
@@ -422,7 +287,6 @@ namespace BuMatrixSecurityRoleAssigner
 
         private List<RoleItem> GetSelectedRoles()
         {
-            CaptureSelection(lvRoles, _roleSelection);
             return _roleSelection.Selected(RolesForDisplay(CollapseRolesByRootRole).Cast<object>())
                 .Cast<RoleItem>().ToList();
         }
